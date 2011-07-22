@@ -69,32 +69,6 @@ extern "C"
 #define LUAW_HOLDS_KEY "__holds"
 #define LUAW_WRAPPER_KEY "LuaWrapper"
 
-#if 0
-// For Debugging
-// Prints the current Lua stack, including the values for some types
-template <typename T>
-void luaW_printstack(lua_State* L)
-{
-    int stack = lua_gettop(L);
-    for (int i = 1; i <= stack; i++)
-    {
-        std::cout << std::dec << i << ": " << lua_typename(L, lua_type(L, i));
-        switch(lua_type(L, i))
-        {
-        case LUA_TBOOLEAN: std::cout << " " << lua_toboolean(L, i); break;
-        case LUA_TSTRING: std::cout << " " << lua_tostring(L, i); break;
-        case LUA_TNUMBER: std::cout << " " << std::dec << (uintptr_t)lua_tointeger(L, i) << " (0x" << std::hex << lua_tointeger(L, i) << ")"; break;
-        default: std::cout << " " << std::hex << lua_topointer(L, i); break;
-        }
-        std::cout << std::endl;
-    }
-}
-#define LUAW_TRACE() \
-    printf("%s:%d:%s\n", __FILE__, __LINE__, __PRETTY_FUNCTION__)
-#else
-#define LUAW_TRACE()
-#endif
-
 // These are the default allocator and deallocator. If you would prefer an
 // alternative option, you may select a different function when registering
 // your class
@@ -103,6 +77,7 @@ T* luaW_defaultallocator(lua_State*)
 {
     return new T();
 }
+
 template <typename T>
 void luaW_defaultdeallocator(T* obj)
 {
@@ -142,7 +117,6 @@ template <typename T> void (*LuaWrapper<T>::deallocator)(T*);
 template <typename T>
 bool luaW_is(lua_State *L, int index, bool strict = false)
 {
-    LUAW_TRACE();
     bool equal = false;
     if (lua_touserdata(L, index) && lua_getmetatable(L, index))
     {
@@ -178,7 +152,6 @@ bool luaW_is(lua_State *L, int index, bool strict = false)
 template <typename T>
 T* luaW_to(lua_State* L, int index)
 {
-    LUAW_TRACE();
     T* obj = NULL;
     if (luaW_is<T>(L, index))
     {
@@ -195,7 +168,6 @@ T* luaW_to(lua_State* L, int index)
 template <typename T>
 T* luaW_check(lua_State* L, int index)
 {
-    LUAW_TRACE();
     T* obj = NULL;
     if (luaW_is<T>(L, index))
     {
@@ -218,7 +190,6 @@ T* luaW_check(lua_State* L, int index)
 template <typename T>
 void luaW_push(lua_State* L, T* obj)
 {
-    LUAW_TRACE();
     T** ud = (T**)lua_newuserdata(L, sizeof(T*)); // ... obj
     *ud = obj;
     luaL_getmetatable(L, LuaWrapper<T>::classname); // ... obj mt
@@ -243,7 +214,6 @@ void luaW_push(lua_State* L, T* obj)
 template <typename T>
 bool luaW_hold(lua_State* L, T* obj)
 {
-    LUAW_TRACE();
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... LuaWrapper
 
     lua_getfield(L, -1, LUAW_HOLDS_KEY); // ... LuaWrapper LuaWrapper.holds
@@ -292,7 +262,6 @@ bool luaW_hold(lua_State* L, T* obj)
 template <typename T>
 void luaW_release(lua_State* L, T* obj)
 {
-    LUAW_TRACE();
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... LuaWrapper
     lua_getfield(L, -1, LUAW_HOLDS_KEY); // ... LuaWrapper LuaWrapper.holds
     LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.holds lud
@@ -306,7 +275,6 @@ void luaW_release(lua_State* L, T* obj)
 template <typename T>
 void luaW_clean(lua_State* L, T* obj)
 {
-    LUAW_TRACE();
     lua_getfield(L, -1, LUAW_STORAGE_KEY); // ... LuaWrapper LuaWrapper.storage
     LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.storage lud
     lua_pushnil(L); // ... LuaWrapper LuaWrapper.storage lud nil
@@ -323,7 +291,6 @@ void luaW_clean(lua_State* L, T* obj)
 template <typename T>
 void luaW_constructor(lua_State* L, int numargs)
 {
-    LUAW_TRACE();
     // ... ud
     lua_getfield(L, -1, LUAW_CTOR_KEY); // ... ud ud.__ctor
     if (lua_type(L, -1) == LUA_TFUNCTION)
@@ -343,7 +310,6 @@ void luaW_constructor(lua_State* L, int numargs)
 template <typename T>
 void luaW_destructor(lua_State* L, T* obj)
 {
-    LUAW_TRACE();
     luaW_push<T>(L, obj); // ... obj
     lua_getfield(L, -1, LUAW_DTOR_KEY); // ... obj obj.__dtor
     if (lua_type(L, -1) == LUA_TFUNCTION)
@@ -365,7 +331,6 @@ void luaW_destructor(lua_State* L, T* obj)
 template <typename T>
 int luaW_new(lua_State* L)
 {
-    LUAW_TRACE();
     int numargs = lua_gettop(L);
     T* obj = LuaWrapper<T>::allocator(L);
     luaW_push<T>(L, obj);
@@ -395,7 +360,6 @@ int luaW_new(lua_State* L)
 template <typename T>
 void luaW_builder(lua_State* L)
 {
-    LUAW_TRACE();
     if (lua_type(L, 1) == LUA_TTABLE)
     {
         // {} ud
@@ -419,7 +383,6 @@ void luaW_builder(lua_State* L)
 template <typename T>
 int luaW_build(lua_State* L)
 {
-    LUAW_TRACE();
     T* obj = LuaWrapper<T>::allocator(L);
     luaW_push<T>(L, obj);
     luaW_hold<T>(L, obj);
@@ -439,7 +402,6 @@ int luaW_build(lua_State* L)
 template <typename T>
 int luaW__index(lua_State* L)
 {
-    LUAW_TRACE();
     // obj key
     T* obj = luaW_to<T>(L, 1);
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // obj key LuaWrapper
@@ -478,7 +440,6 @@ int luaW__index(lua_State* L)
 template <typename T>
 int luaW__newindex(lua_State* L)
 {
-    LUAW_TRACE();
     // obj key value
     T* obj = luaW_to<T>(L, 1);
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // obj key value LuaWrapper
@@ -503,7 +464,6 @@ int luaW__newindex(lua_State* L)
 template <typename T>
 int luaW__gc(lua_State* L)
 {
-    LUAW_TRACE();
     // obj
     T* obj = luaW_to<T>(L, 1);
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // obj LuaWrapper
@@ -535,7 +495,6 @@ int luaW__gc(lua_State* L)
 template <typename T>
 void luaW_registerex(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends, T* (*allocator)(lua_State*), void (*deallocator)(T*), void (*identifier)(lua_State*, T*))
 {
-    LUAW_TRACE();
     LuaWrapper<T>::classname = classname;
     LuaWrapper<T>::identifier = identifier;
     LuaWrapper<T>::allocator = allocator;
