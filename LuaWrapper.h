@@ -572,15 +572,15 @@ void luaW_registerex(lua_State* L, const char* classname, const luaL_reg* table,
     lua_pop(L, 1); //
 
     // Open table
-    // if (allocator)
-    // {
+    if (allocator)
+    {
         luaL_register(L, LuaWrapper<T>::classname, defaulttable); // T
         luaL_register(L, NULL, table); // T
-    // }
-    // else
-    // {
-        // luaL_register(L, LuaWrapper<T>::classname, table); // T
-    // }
+    }
+    else
+    {
+        luaL_register(L, LuaWrapper<T>::classname, table); // T
+    }
 
     // Open metatable, set up extends table
     luaL_newmetatable(L, LuaWrapper<T>::classname); // T mt
