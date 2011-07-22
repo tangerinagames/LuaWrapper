@@ -99,7 +99,7 @@ void luaW_printstack(lua_State* L)
 // alternative option, you may select a different function when registering
 // your class
 template <typename T>
-T* luaW_defaultallocator()
+T* luaW_defaultallocator(lua_State*)
 {
     return new T();
 }
@@ -109,24 +109,11 @@ void luaW_defaultdeallocator(T* obj)
     delete obj;
 }
 
-// This class is used with luaW_register as an alternative to using the
-// normal constructor. Sometimes it's just easier to fill in the fields
-// of a struct than to file in all the arguments in luaW_register,
-// especially if you just want to set the last one or two.
 template <typename T>
-struct LuaWrapperOptions
+void luaW_defaultidentifier(lua_State* L, T* obj)
 {
-    LuaWrapperOptions(
-        const luaL_reg* table = NULL, const luaL_reg* metatable = NULL, const char** extends = NULL, bool disablenew = false, T* (*allocator)() = luaW_defaultallocator<T>, void (*deallocator)(T*) = luaW_defaultdeallocator<T>)
-        : table(table), metatable(metatable), extends(extends), disablenew(disablenew), allocator(allocator), deallocator(deallocator) { }
-
-    const luaL_reg* table;
-    const luaL_reg* metatable;
-    const char** extends;
-    bool disablenew;
-    T* (*allocator)();
-    void (*deallocator)(T*);
-};
+    lua_pushlightuserdata(L, obj);
+}
 
 // This class cannot actually to be instantiated. It is used only hold the
 // table name and other information.
@@ -135,13 +122,15 @@ class LuaWrapper
 {
 public:
     static const char* classname;
-    static T* (*allocator)();
+    static void (*identifier)(lua_State*, T*);
+    static T* (*allocator)(lua_State*);
     static void (*deallocator)(T*);
 private:
     LuaWrapper();
 };
 template <typename T> const char* LuaWrapper<T>::classname;
-template <typename T> T* (*LuaWrapper<T>::allocator)();
+template <typename T> void (*LuaWrapper<T>::identifier)(lua_State*, T*);
+template <typename T> T* (*LuaWrapper<T>::allocator)(lua_State*);
 template <typename T> void (*LuaWrapper<T>::deallocator)(T*);
 
 // [-0, +0, -]
@@ -236,10 +225,10 @@ void luaW_push(lua_State* L, T* obj)
     lua_setmetatable(L, -2); // ... obj
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... obj LuaWrapper
     lua_getfield(L, -1, LUAW_COUNT_KEY); // ... obj LuaWrapper LuaWrapper.counts
-    lua_pushlightuserdata(L, obj); // ... obj LuaWrapper LuaWrapper.counts lud
+    LuaWrapper<T>::identifier(L, obj); // ... obj LuaWrapper LuaWrapper.counts lud
     lua_gettable(L, -2); // ... obj LuaWrapper LuaWrapper.counts count
     int count = lua_tointeger(L, -1);
-    lua_pushlightuserdata(L, obj); // ... obj LuaWrapper LuaWrapper.counts count lud
+    LuaWrapper<T>::identifier(L, obj); // ... obj LuaWrapper LuaWrapper.counts count lud
     lua_pushinteger(L, count+1); // ... obj LuaWrapper LuaWrapper.counts count lud count+1
     lua_settable(L, -4); // ... obj LuaWrapper LuaWrapper.counts count
     lua_pop(L, 3); // ... obj
@@ -258,7 +247,7 @@ bool luaW_hold(lua_State* L, T* obj)
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... LuaWrapper
 
     lua_getfield(L, -1, LUAW_HOLDS_KEY); // ... LuaWrapper LuaWrapper.holds
-    lua_pushlightuserdata(L, obj); // ... LuaWrapper LuaWrapper.holds lud
+    LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.holds lud
     lua_rawget(L, -2); // ... LuaWrapper LuaWrapper.holds hold
     bool held = lua_toboolean(L, -1);
     // If it's not held, hold it
@@ -266,26 +255,26 @@ bool luaW_hold(lua_State* L, T* obj)
     {
         // Apply hold boolean
         lua_pop(L, 1); // ... LuaWrapper LuaWrapper.holds
-        lua_pushlightuserdata(L, obj); // ... LuaWrapper LuaWrapper.holds lud
+        LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.holds lud
         lua_pushboolean(L, true); // ... LuaWrapper LuaWrapper.holds lud true
         lua_rawset(L, -3); // ... LuaWrapper LuaWrapper.holds
 
         // Check count, if there's at least one, add a storage table
         lua_pop(L, 1); // ... LuaWrapper
         lua_getfield(L, -1, LUAW_COUNT_KEY); // ... LuaWrapper LuaWrapper.counts
-        lua_pushlightuserdata(L, obj); // ... LuaWrapper LuaWrapper.counts lud
+        LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.counts lud
         lua_rawget(L, -2); // ... LuaWrapper LuaWrapper.counts count
         if (lua_tointeger(L, -1) > 0)
         {
             // Add the storage table if there isn't one already
             lua_pop(L, 2);
             lua_getfield(L, -1, LUAW_STORAGE_KEY); // ... LuaWrapper LuaWrapper.storage
-            lua_pushlightuserdata(L, obj); // ... LuaWrapper LuaWrapper.storage lud
+            LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.storage lud
             lua_rawget(L, -2); // ... LuaWrapper LuaWrapper.storage store
             if (lua_isnoneornil(L, -1))
             {
                 lua_pop(L, 1); // ... LuaWrapper LuaWrapper.storage
-                lua_pushlightuserdata(L, obj); // ... LuaWrapper LuaWrapper.storage lud
+                LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.storage lud
                 lua_newtable(L); // ... LuaWrapper LuaWrapper.storage lud store
                 lua_rawset(L, -3); // ... LuaWrapper LuaWrapper.storage
                 lua_pop(L, 2); // ...
@@ -306,7 +295,7 @@ void luaW_release(lua_State* L, T* obj)
     LUAW_TRACE();
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... LuaWrapper
     lua_getfield(L, -1, LUAW_HOLDS_KEY); // ... LuaWrapper LuaWrapper.holds
-    lua_pushlightuserdata(L, obj); // ... LuaWrapper LuaWrapper.holds lud
+    LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.holds lud
     lua_pushnil(L); // ... LuaWrapper LuaWrapper.counts lud nil
     lua_settable(L, -3); // ... LuaWrapper LuaWrapper.counts count
     lua_pop(L, 1); // ... LuaWrapper
@@ -319,7 +308,7 @@ void luaW_clean(lua_State* L, T* obj)
 {
     LUAW_TRACE();
     lua_getfield(L, -1, LUAW_STORAGE_KEY); // ... LuaWrapper LuaWrapper.storage
-    lua_pushlightuserdata(L, obj); // ... LuaWrapper LuaWrapper.storage lud
+    LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.storage lud
     lua_pushnil(L); // ... LuaWrapper LuaWrapper.storage lud nil
     lua_settable(L, -3);  // ... LuaWrapper LuaWrapper.store
     lua_pop(L, 2); // ...
@@ -378,7 +367,7 @@ int luaW_new(lua_State* L)
 {
     LUAW_TRACE();
     int numargs = lua_gettop(L);
-    T* obj = LuaWrapper<T>::allocator();
+    T* obj = LuaWrapper<T>::allocator(L);
     luaW_push<T>(L, obj);
     luaW_hold<T>(L, obj);
     luaW_constructor<T>(L, numargs);
@@ -431,7 +420,7 @@ template <typename T>
 int luaW_build(lua_State* L)
 {
     LUAW_TRACE();
-    T* obj = LuaWrapper<T>::allocator();
+    T* obj = LuaWrapper<T>::allocator(L);
     luaW_push<T>(L, obj);
     luaW_hold<T>(L, obj);
     luaW_builder<T>(L);
@@ -455,7 +444,7 @@ int luaW__index(lua_State* L)
     T* obj = luaW_to<T>(L, 1);
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // obj key LuaWrapper
     lua_getfield(L, -1, LUAW_STORAGE_KEY); // obj key LuaWrapper LuaWrapper.storage
-    lua_pushlightuserdata(L, obj); // obj key LuaWrapper LuaWrapper.table lud
+    LuaWrapper<T>::identifier(L, obj); // obj key LuaWrapper LuaWrapper.table lud
     lua_rawget(L, -2); // obj key LuaWrapper LuaWrapper.table table
     if (!lua_isnoneornil(L, -1))
     {
@@ -494,7 +483,7 @@ int luaW__newindex(lua_State* L)
     T* obj = luaW_to<T>(L, 1);
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // obj key value LuaWrapper
     lua_getfield(L, -1, LUAW_STORAGE_KEY); // obj key value LuaWrapper LuaWrapper.storage
-    lua_pushlightuserdata(L, obj); // obj key value LuaWrapper LuaWrapper.storage lud
+    LuaWrapper<T>::identifier(L, obj); // obj key value LuaWrapper LuaWrapper.storage lud
     lua_rawget(L, -2); // obj key value LuaWrapper LuaWrapper.storage store
     if (!lua_isnoneornil(L, -1))
     {
@@ -519,10 +508,10 @@ int luaW__gc(lua_State* L)
     T* obj = luaW_to<T>(L, 1);
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // obj LuaWrapper
     lua_getfield(L, -1, LUAW_COUNT_KEY); // obj LuaWrapper LuaWrapper.counts
-    lua_pushlightuserdata(L, obj); // obj LuaWrapper LuaWrapper.counts lud
+    LuaWrapper<T>::identifier(L, obj); // obj LuaWrapper LuaWrapper.counts lud
     lua_gettable(L, -2); // obj LuaWrapper LuaWrapper.counts count
     int count = lua_tointeger(L, -1);
-    lua_pushlightuserdata(L, obj); // obj LuaWrapper LuaWrapper.counts count lud
+    LuaWrapper<T>::identifier(L, obj); // obj LuaWrapper LuaWrapper.counts count lud
     lua_pushinteger(L, count-1); // obj LuaWrapper LuaWrapper.counts count lud count-1
     lua_settable(L, -4); // obj LuaWrapper LuaWrapper.counts count
     lua_pop(L, 3); // obj LuaWrapper
@@ -532,7 +521,7 @@ int luaW__gc(lua_State* L)
         luaW_destructor<T>(L, obj);
         luaW_release<T>(L, obj);
         luaW_clean<T>(L, obj);
-        delete obj;
+        LuaWrapper<T>::deallocator(obj);
     }
     return 0;
 }
@@ -544,10 +533,11 @@ int luaW__gc(lua_State* L)
 // of the extended class to T's metatable (assuming T's metatable doesn't have
 // something in that key already).
 template <typename T>
-void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends = NULL, bool disablenew = false, T* (*allocator)() = luaW_defaultallocator<T>, void (*deallocator)(T*) = luaW_defaultdeallocator<T>)
+void luaW_registerex(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends, T* (*allocator)(lua_State*), void (*deallocator)(T*), void (*identifier)(lua_State*, T*))
 {
     LUAW_TRACE();
     LuaWrapper<T>::classname = classname;
+    LuaWrapper<T>::identifier = identifier;
     LuaWrapper<T>::allocator = allocator;
     LuaWrapper<T>::deallocator = deallocator;
     const luaL_reg defaulttable[] =
@@ -582,15 +572,15 @@ void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, c
     lua_pop(L, 1); //
 
     // Open table
-    if (!disablenew)
-    {
+    // if (allocator)
+    // {
         luaL_register(L, LuaWrapper<T>::classname, defaulttable); // T
         luaL_register(L, NULL, table); // T
-    }
-    else
-    {
-        luaL_register(L, LuaWrapper<T>::classname, table); // T
-    }
+    // }
+    // else
+    // {
+        // luaL_register(L, LuaWrapper<T>::classname, table); // T
+    // }
 
     // Open metatable, set up extends table
     luaL_newmetatable(L, LuaWrapper<T>::classname); // T mt
@@ -647,12 +637,28 @@ void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, c
     lua_pop(L, 1); //
 }
 
-// Same as above, except sometimes its nice to be able to only have to set the
-// fields you care about using a struct.
-template<typename T>
-void luaW_register(lua_State* L, const char* classname, LuaWrapperOptions<T>& options)
+template <typename T,  T* (*allocator)(lua_State*) = luaW_defaultallocator<T>, void (*deallocator)(T*) = luaW_defaultdeallocator<T> >
+void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends = NULL, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
 {
-    luaW_register(L, classname, options.table, options.metatable, options.extends, options.disablenew, options.allocator, options.deallocator);
+    luaW_registerex<T>(L, classname, table, metatable, extends, allocator, deallocator, identifier);
+}
+
+template <typename T, int, void (*deallocator)(T*) = luaW_defaultdeallocator<T> >
+void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends = NULL, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
+{
+    luaW_registerex<T>(L, classname, table, metatable, extends, NULL, deallocator, identifier);
+}
+
+template <typename T, T* (*allocator)(lua_State*) = luaW_defaultallocator<T>, int >
+void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends = NULL, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
+{
+    luaW_registerex<T>(L, classname, table, metatable, extends, allocator, NULL, identifier);
+}
+
+template <typename T, int, int >
+void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends = NULL, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
+{
+    luaW_registerex<T>(L, classname, table, metatable, extends, NULL, NULL, identifier);
 }
 
 #undef luaW_getregistry
