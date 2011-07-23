@@ -49,8 +49,8 @@
 #include <iostream>
 extern "C"
 {
-    #include "lua.h"
-    #include "lauxlib.h"
+#include "lua.h"
+#include "lauxlib.h"
 }
 
 #define LUAW_BUILDER
@@ -79,7 +79,7 @@ T* luaW_defaultallocator(lua_State*)
 }
 
 template <typename T>
-void luaW_defaultdeallocator(T* obj)
+void luaW_defaultdeallocator(lua_State*, T* obj)
 {
     delete obj;
 }
@@ -99,14 +99,14 @@ public:
     static const char* classname;
     static void (*identifier)(lua_State*, T*);
     static T* (*allocator)(lua_State*);
-    static void (*deallocator)(T*);
+    static void (*deallocator)(lua_State*, T*);
 private:
     LuaWrapper();
 };
 template <typename T> const char* LuaWrapper<T>::classname;
 template <typename T> void (*LuaWrapper<T>::identifier)(lua_State*, T*);
 template <typename T> T* (*LuaWrapper<T>::allocator)(lua_State*);
-template <typename T> void (*LuaWrapper<T>::deallocator)(T*);
+template <typename T> void (*LuaWrapper<T>::deallocator)(lua_State*, T*);
 
 // [-0, +0, -]
 //
@@ -481,7 +481,8 @@ int luaW__gc(lua_State* L)
         luaW_destructor<T>(L, obj);
         luaW_release<T>(L, obj);
         luaW_clean<T>(L, obj);
-        LuaWrapper<T>::deallocator(obj);
+        if (LuaWrapper<T>::deallocator)
+            LuaWrapper<T>::deallocator(L, obj);
     }
     return 0;
 }
@@ -493,7 +494,7 @@ int luaW__gc(lua_State* L)
 // of the extended class to T's metatable (assuming T's metatable doesn't have
 // something in that key already).
 template <typename T>
-void luaW_registerex(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends, T* (*allocator)(lua_State*), void (*deallocator)(T*), void (*identifier)(lua_State*, T*))
+void luaW_registerex(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends, T* (*allocator)(lua_State*), void (*deallocator)(lua_State*, T*), void (*identifier)(lua_State*, T*))
 {
     LuaWrapper<T>::classname = classname;
     LuaWrapper<T>::identifier = identifier;
@@ -596,13 +597,13 @@ void luaW_registerex(lua_State* L, const char* classname, const luaL_reg* table,
     lua_pop(L, 1); //
 }
 
-template <typename T,  T* (*allocator)(lua_State*) = luaW_defaultallocator<T>, void (*deallocator)(T*) = luaW_defaultdeallocator<T> >
+template <typename T,  T* (*allocator)(lua_State*) = luaW_defaultallocator<T>, void (*deallocator)(lua_State*, T*) = luaW_defaultdeallocator<T> >
 void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends = NULL, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
 {
     luaW_registerex<T>(L, classname, table, metatable, extends, allocator, deallocator, identifier);
 }
 
-template <typename T, int, void (*deallocator)(T*) = luaW_defaultdeallocator<T> >
+template <typename T, int, void (*deallocator)(lua_State*, T*) = luaW_defaultdeallocator<T> >
 void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends = NULL, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
 {
     luaW_registerex<T>(L, classname, table, metatable, extends, NULL, deallocator, identifier);
