@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010 Alexander Ames
+ * Copyright (c) 2010-2011 Alexander Ames
  * Alexander.Ames@gmail.com
  * See Copyright Notice at the end of this file
  */
@@ -77,13 +77,17 @@ T* luaW_defaultallocator(lua_State*)
 {
     return new T();
 }
-
 template <typename T>
 void luaW_defaultdeallocator(lua_State*, T* obj)
 {
     delete obj;
 }
 
+// The identifier function is responsible for pushing a value unique to each
+// object on to the stack. Most of the time, this can simply be the address
+// of the pointer, but sometimes that is not adaquate. For example, if you
+// are using shared_ptr you would need to push the address of the object the
+// shared_ptr represents, rather than the address of the shared_ptr itself.
 template <typename T>
 void luaW_defaultidentifier(lua_State* L, T* obj)
 {
@@ -166,10 +170,10 @@ T* luaW_to(lua_State* L, int index)
 //
 // Checks whether the function argument at index is a T and returns this object
 template <typename T>
-T* luaW_check(lua_State* L, int index)
+T* luaW_check(lua_State* L, int index, bool strict = false)
 {
     T* obj = NULL;
-    if (luaW_is<T>(L, index))
+    if (luaW_is<T>(L, index, strict))
     {
         obj = *(T**)lua_touserdata(L, index);
     }
@@ -282,7 +286,7 @@ void luaW_clean(lua_State* L, T* obj)
     lua_pop(L, 2); // ...
 }
 
-// This function is called from Lua, not C++
+// This function is generally called from Lua, not C++
 //
 // Calls the lua defined constructor ("__ctor") on a userdata. Assumes the
 // userdata is on top of the stack, and numargs arguments are below it. This
@@ -307,6 +311,11 @@ void luaW_constructor(lua_State* L, int numargs)
     }
 }
 
+// This function is generally called from Lua, not C++
+//
+// Calls the lua defined destructor ("__dtor") on a userdata. this runs the
+// DTOR_KEY function on T's metatable, using the object as the first and only
+// argument
 template <typename T>
 void luaW_destructor(lua_State* L, T* obj)
 {
@@ -352,9 +361,9 @@ int luaW_new(lua_State* L)
 //     Y = 20;
 // }
 //
-// This will then create a new Foo object, and then call f:X(10) and f:Y(20) on
-// that object. The constructor is not called at any point. The keys in this
-// table are used as function names on the metatable.
+// This will then create a new Foo object, and then call f:X(10) and f:Y(20)
+// on that object. The lua defined constructor is not called at any point. The
+// keys in this table are used as function names on the metatable.
 //
 // This is sort of experimental, just to see if it ends up being useful.
 template <typename T>
@@ -487,12 +496,36 @@ int luaW__gc(lua_State* L)
     return 0;
 }
 
-// Run this to create a table and metatable for your class. You must have a
-// correctly initialized LuaWrapper<T> for your class in order for this to
-// properly initilize your class wrapper. This function will also take care of
-// extending any classes T inherits from by copying the values in the metatable
-// of the extended class to T's metatable (assuming T's metatable doesn't have
-// something in that key already).
+// luaW_registerex is an internal function, use the wrapper function
+// luaW_register to access it.
+//
+// Run luaW_register to create a table and metatable for your class. This
+// creates a table with the name you specify filled with the function from the
+// table argument in addition to the functions new and build. This is generally
+// for things you think of as static methods in C++. The metatable becomes a
+// metatable for each object if your class. These can be thought of as member
+// functions or methods. You may specify a null terminated array of strings
+// representing the classes you wish to extend. All functions in the base class
+// will be available to the derived class (except when they share a function
+// name, in which case the derived class's function wins).
+//
+// You may also supply code constructors and destructors as the second and
+// third template arguments, for classes that do not have a default constructor
+// or that require special set up or tear down. You may specify NULL as the
+// constructor, which means that you will not be able to call the new function
+// on your class table. You will need to manually push objects from C++. By
+// default, the default constructor is used to create objects and a simple call
+// to delete is used to destroy them. These functions are templates because in
+// some cases the default constructor does not exist, and making it a template
+// argument rather than a regular argument prevents instaniation of the default
+// constructor.
+//
+// By default, LuaWrapper uses the address of C++ object to identify unique
+// objects. In some cases this is not desired, such as in the case of
+// shared_ptrs. Two shared_ptrs may themselves have unique locations in memory
+// but still represent the same object. For cases like that, you may specify an
+// identifier function which is responsible for pushing a key representing your
+// object on to the stack.
 template <typename T>
 void luaW_registerex(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends, T* (*allocator)(lua_State*), void (*deallocator)(lua_State*, T*), void (*identifier)(lua_State*, T*))
 {
@@ -625,7 +658,7 @@ void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, c
 #undef luaW_setregistry
 
 /*
- * Copyright (c) 2010 Alexander Ames
+ * Copyright (c) 2010-2011 Alexander Ames
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
