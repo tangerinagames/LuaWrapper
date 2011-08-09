@@ -21,6 +21,7 @@ The main functions of interest are the following:
  luaW_check<T>
  luaW_push<T>
  luaW_register<T>
+ luaW_extend<T, U>
  luaW_hold<T>
  luaW_release<T>
  luaW_clean<T>
@@ -37,12 +38,9 @@ Registering a class:
 Run luaW_register to create a table and metatable for your class. This creates
 a table with the name you specify filled with the function from the table
 argument in addition to the functions new and build. This is generally for
-things you think of as static methods in C++.  The metatable becomes a
-metatable for each object if your class. These can be thought of as member
-functions or methods. You may specify a null terminated array of strings
-representing the classes you wish to extend. All functions in the base class
-will be available to the derived class (except when they share a function name,
-in which case the derived class's function wins). 
+things you think of as static methods in C++. The metatable becomes a metatable
+for each object if your class. These can be thought of as member functions or
+methods.
 
 You may also supply code constructors and destructors as the second and third
 template arguments, for classes that do not have a default constructor or that
@@ -60,6 +58,13 @@ shared_ptrs. Two shared_ptrs may themselves have unique locations in memory
 but still represent the same object. For cases like that, you may specify an
 identifier function which is responsible for pushing a key representing your
 object on to the stack.
+
+Extending a class:
+
+To extend a class use the function luaW_extend<T, U>, where T is a class that
+extends U. All functions in the base class will be available to the derived
+class (except when they share a function name, in which case the derived
+class's function wins).
 
 Pointer Ownership:
 

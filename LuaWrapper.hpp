@@ -22,6 +22,7 @@
 //  luaW_check<T>
 //  luaW_push<T>
 //  luaW_register<T>
+//  luaW_extend<T, U>
 //  luaW_hold<T>
 //  luaW_release<T>
 //  luaW_clean<T>
@@ -46,7 +47,6 @@
 #ifndef LUA_WRAPPER_H_
 #define LUA_WRAPPER_H_
 
-#include <iostream>
 extern "C"
 {
 #include "lua.h"
@@ -94,6 +94,20 @@ void luaW_defaultidentifier(lua_State* L, T* obj)
     lua_pushlightuserdata(L, obj);
 }
 
+// This class is what is used by LuaWrapper to contain the userdata. data
+// stores a pointer to the object itself, and cast is used to cast toward the
+// base class if there is one and it is necessary. Rather than use RTTI and
+// typid to compare types, I use the clever trick of using the cast to compare
+// types. Because there is at most one cast per type, I can use it to identify
+// when and object is the type I want. This is only used internally.
+struct luaW_Userdata
+{
+    luaW_Userdata(void* data = NULL, luaW_Userdata (*cast)(const luaW_Userdata&) = NULL) 
+        : data(data), cast(cast) {}
+    void* data;
+    luaW_Userdata (*cast)(const luaW_Userdata&);
+};
+
 // This class cannot actually to be instantiated. It is used only hold the
 // table name and other information.
 template <typename T>
@@ -104,6 +118,7 @@ public:
     static void (*identifier)(lua_State*, T*);
     static T* (*allocator)(lua_State*);
     static void (*deallocator)(lua_State*, T*);
+    static luaW_Userdata (*cast)(const luaW_Userdata&);
 private:
     LuaWrapper();
 };
@@ -111,6 +126,16 @@ template <typename T> const char* LuaWrapper<T>::classname;
 template <typename T> void (*LuaWrapper<T>::identifier)(lua_State*, T*);
 template <typename T> T* (*LuaWrapper<T>::allocator)(lua_State*);
 template <typename T> void (*LuaWrapper<T>::deallocator)(lua_State*, T*);
+template <typename T> luaW_Userdata (*LuaWrapper<T>::cast)(const luaW_Userdata&);
+
+// Cast from an object of type T to an object of type U. This template
+// function is instantiated by calling luaW_extend<T, U>(L). This is only used
+// internally.
+template <typename T, typename U>
+luaW_Userdata luaW_cast(const luaW_Userdata& obj)
+{
+    return luaW_Userdata(static_cast<U*>(static_cast<T*>(obj.data)), LuaWrapper<U>::cast);
+}
 
 // [-0, +0, -]
 //
@@ -154,14 +179,20 @@ bool luaW_is(lua_State *L, int index, bool strict = false)
 // Converts the given acceptable index to a T*. That value must be of type T;
 // otherwise, returns NULL.
 template <typename T>
-T* luaW_to(lua_State* L, int index)
+T* luaW_to(lua_State* L, int index, bool strict = false)
 {
-    T* obj = NULL;
-    if (luaW_is<T>(L, index))
+    if (luaW_is<T>(L, index, strict))
     {
-        obj = *(T**)lua_touserdata(L, index);
+        luaW_Userdata* pud = (luaW_Userdata*)lua_touserdata(L, index);
+        luaW_Userdata ud;
+        while (!strict && LuaWrapper<T>::cast != pud->cast)
+        {
+            ud = pud->cast(*pud);
+            pud = &ud;
+        } 
+        return (T*)pud->data;
     }
-    return obj;
+    return NULL;
 }
 
 // [-0, +0, -]
@@ -175,7 +206,14 @@ T* luaW_check(lua_State* L, int index, bool strict = false)
     T* obj = NULL;
     if (luaW_is<T>(L, index, strict))
     {
-        obj = *(T**)lua_touserdata(L, index);
+        luaW_Userdata* pud = (luaW_Userdata*)lua_touserdata(L, index);
+        luaW_Userdata ud;
+        while (!strict && LuaWrapper<T>::cast != pud->cast)
+        {
+            ud = pud->cast(*pud);
+            pud = &ud;
+        } 
+        obj = (T*)pud->data;
     }
     else
     {
@@ -194,8 +232,9 @@ T* luaW_check(lua_State* L, int index, bool strict = false)
 template <typename T>
 void luaW_push(lua_State* L, T* obj)
 {
-    T** ud = (T**)lua_newuserdata(L, sizeof(T*)); // ... obj
-    *ud = obj;
+    luaW_Userdata* ud = (luaW_Userdata*)lua_newuserdata(L, sizeof(luaW_Userdata)); // ... obj
+    ud->data = obj;
+    ud->cast = LuaWrapper<T>::cast;
     luaL_getmetatable(L, LuaWrapper<T>::classname); // ... obj mt
     lua_setmetatable(L, -2); // ... obj
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... obj LuaWrapper
@@ -527,12 +566,13 @@ int luaW__gc(lua_State* L)
 // identifier function which is responsible for pushing a key representing your
 // object on to the stack.
 template <typename T>
-void luaW_registerex(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends, T* (*allocator)(lua_State*), void (*deallocator)(lua_State*, T*), void (*identifier)(lua_State*, T*))
+void luaW_registerex(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, T* (*allocator)(lua_State*), void (*deallocator)(lua_State*, T*), void (*identifier)(lua_State*, T*))
 {
     LuaWrapper<T>::classname = classname;
     LuaWrapper<T>::identifier = identifier;
     LuaWrapper<T>::allocator = allocator;
     LuaWrapper<T>::deallocator = deallocator;
+
     const luaL_reg defaulttable[] =
     {
         { "new", luaW_new<T> },
@@ -582,76 +622,85 @@ void luaW_registerex(lua_State* L, const char* classname, const luaL_reg* table,
     luaL_register(L, NULL, defaultmetatable); // T mt
     luaL_register(L, NULL, metatable); // T mt
 
-    // Copy key/value pairs from extended metatables
-    for (const char** e = extends; e && *e; ++e)
-    {
-        luaL_getmetatable(L, *e); // T mt emt
-        if(lua_isnoneornil(L, -1))
-        {
-            lua_pop(L, 1); // T mt
-            std::cout << "Error: did not open table " << *e << " before " << LuaWrapper<T>::classname << std::endl;
-            continue;
-        }
-        lua_getfield(L, -2, LUAW_EXTENDS_KEY); // T mt emt mt.__extends
-        lua_pushvalue(L, -2); // T mt emt mt.__extends emt
-        lua_setfield(L, -2, *e); // T mt emt mt.__extends
-        lua_getfield(L, -2, LUAW_EXTENDS_KEY); // T mt emt mt.__extends emt.__extends
-
-        for (lua_pushnil(L); lua_next(L, -2); lua_pop(L, 1))
-        {
-            // T mt emt mt.__extends emt.__extends k v
-            lua_pushvalue(L, -2); // T mt emt mt.__extends emt.__extends k v k
-            lua_pushvalue(L, -2); // T mt emt mt.__extends emt.__extends k v k
-            lua_rawset(L, -6); // T mt emt mt.__extends emt.__extends k v
-        }
-
-        lua_pop(L, 2); // T mt emt
-
-        for (lua_pushnil(L); lua_next(L, -2); lua_pop(L, 1))
-        {
-            // T mt emt k v
-            lua_pushvalue(L, -2); // T mt emt k v k
-            lua_gettable(L, -5); // T mt emt k v mt[k]
-            if(lua_isnoneornil(L, -1))
-            {
-                lua_pop(L, 1); // T mt emt k v
-                lua_pushvalue(L, -2); // T mt emt k v k
-                lua_pushvalue(L, -2); // T mt emt k v k v
-                lua_rawset(L, -6); // T mt emt k v
-            }
-            else
-            {
-                lua_pop(L, 1); // T mt k v
-            }
-        }
-        lua_pop(L, 1); // T mt
-    }
     lua_setmetatable(L, -2); // T
     lua_pop(L, 1); //
 }
 
 template <typename T,  T* (*allocator)(lua_State*) = luaW_defaultallocator<T>, void (*deallocator)(lua_State*, T*) = luaW_defaultdeallocator<T> >
-void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends = NULL, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
+void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
 {
-    luaW_registerex<T>(L, classname, table, metatable, extends, allocator, deallocator, identifier);
+    luaW_registerex<T>(L, classname, table, metatable, allocator, deallocator, identifier);
 }
 
 template <typename T, int, void (*deallocator)(lua_State*, T*) = luaW_defaultdeallocator<T> >
-void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends = NULL, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
+void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
 {
-    luaW_registerex<T>(L, classname, table, metatable, extends, NULL, deallocator, identifier);
+    luaW_registerex<T>(L, classname, table, metatable, NULL, deallocator, identifier);
 }
 
 template <typename T, T* (*allocator)(lua_State*) = luaW_defaultallocator<T>, int >
-void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends = NULL, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
+void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
 {
-    luaW_registerex<T>(L, classname, table, metatable, extends, allocator, NULL, identifier);
+    luaW_registerex<T>(L, classname, table, metatable, allocator, NULL, identifier);
 }
 
 template <typename T, int, int >
-void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, const char** extends = NULL, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
+void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
 {
-    luaW_registerex<T>(L, classname, table, metatable, extends, NULL, NULL, identifier);
+    luaW_registerex<T>(L, classname, table, metatable, NULL, NULL, identifier);
+}
+
+// luaW_extend is used to declare that class T inherits from class U, and it
+// should have access to all of its metatable functions. This also allows
+// luaW_to<T> to cast your object apropriately, as casts straight through a
+// void pointer do not work.
+template <typename T, typename U>
+bool luaW_extend(lua_State* L)
+{
+    LuaWrapper<T>::cast = luaW_cast<T, U>;
+
+    // Copy key/value pairs from extended metatables
+    luaL_getmetatable(L, LuaWrapper<T>::classname); // mt
+    luaL_getmetatable(L, LuaWrapper<U>::classname); // mt emt
+    if(lua_isnoneornil(L, -2) || lua_isnoneornil(L, -1))
+    {
+        lua_pop(L, 2);
+        return false;
+    }
+    lua_getfield(L, -2, LUAW_EXTENDS_KEY); // mt emt mt.__extends
+    lua_pushvalue(L, -2); // mt emt mt.__extends emt
+    lua_setfield(L, -2, LuaWrapper<U>::classname); // mt emt mt.__extends
+    lua_getfield(L, -2, LUAW_EXTENDS_KEY); // mt emt mt.__extends emt.__extends
+
+    for (lua_pushnil(L); lua_next(L, -2); lua_pop(L, 1))
+    {
+        // mt emt mt.__extends emt.__extends k v
+        lua_pushvalue(L, -2); // mt emt mt.__extends emt.__extends k v k
+        lua_pushvalue(L, -2); // mt emt mt.__extends emt.__extends k v k
+        lua_rawset(L, -6); // mt emt mt.__extends emt.__extends k v
+    }
+
+    lua_pop(L, 2); // mt emt
+
+    for (lua_pushnil(L); lua_next(L, -2); lua_pop(L, 1))
+    {
+        // mt emt k v
+        lua_pushvalue(L, -2); // mt emt k v k
+        lua_gettable(L, -5); // mt emt k v mt[k]
+        if(lua_isnoneornil(L, -1))
+        {
+            lua_pop(L, 1); // mt emt k v
+            lua_pushvalue(L, -2); // mt emt k v k
+            lua_pushvalue(L, -2); // mt emt k v k v
+            lua_rawset(L, -6); // mt emt k v
+        }
+        else
+        {
+            lua_pop(L, 1); // mt k v
+        }
+    }
+    lua_pop(L, 2); 
+    return true;
 }
 
 #undef luaW_getregistry
