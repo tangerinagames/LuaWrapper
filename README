@@ -2,14 +2,12 @@ LuaWrapper
 Copyright (c) 2010-2011 Alexander Ames
 Alexander.Ames@gmail.com
 
-LuaWrapper is a library designed to help bridge the gab between Lua and C++. It
-is designed to be small (a single header file), simple, fast, and typesafe. It
-has no external dependencies other than the lua library itself, and iostream
-(which can probably be removed, I just need to decide what the best way to do
-that is), and does not need to be precompiled; the header can simply be dropped
-into a project and used immediately. It even supports class inheritance to a
-certain degree. Objects can be created in either Lua or C++, and passed back
-and forth.
+LuaWrapper is a library designed to help bridge the gab between Lua and C++.
+It is designed to be small (a single header file), simple, fast, and typesafe.
+It has no external dependencies other than the lua library itself, and does
+not need to be precompiled; the header can simply be dropped into a project
+and used immediately. It even supports class inheritance to a certain degree.
+Objects can be created in either Lua or C++, and passed back and forth.
 
 In Lua, the objects are userdata, but through tricky use of metatables, they
 can be treated almost identically to tables. Each userdata has a __index and
@@ -91,14 +89,6 @@ removed, but I'm going to leave it around for a while to see if it becomes
 useful for anything. 
 
 To do:
-
-I would like it if the library had absolutely no dependencies except for Lua.
-Currently, it requires iostream to print out an error message in the case where
-you register classes in the wrong order and it cannot find one of the base
-types. I'm considering removing that error message and either having the
-function return false or some error code, or possibly return the string of the
-first missing class name it encounters. I'm undecided on what the better
-approach is. 
 
 There may be a better way to handle the constructor and destructors rather than
 make them template arguments. I initially had constructors and destructors as
