@@ -50,7 +50,7 @@ table. You will need to manually push objects from C++. By default, the default
 constructor is used to create objects and a simple call to delete is used to
 destroy them. These functions are templates because in some cases the default
 constructor does not exist, and making it a template argument rather than a
-regular argument prevents instaniation of the default constructor. 
+regular argument prevents instantiation of the default constructor. 
 
 By default, LuaWrapper uses the address of C++ object to identify unique
 objects. In some cases this is not desired, such as in the case of
@@ -92,7 +92,7 @@ useful for anything.
 
 To do:
 
-I would like it if the library had absolutely no dependancies except for Lua.
+I would like it if the library had absolutely no dependencies except for Lua.
 Currently, it requires iostream to print out an error message in the case where
 you register classes in the wrong order and it cannot find one of the base
 types. I'm considering removing that error message and either having the
@@ -107,7 +107,7 @@ default functions would get instantiated even when I did not want them to,
 which caused problems for classes without a default constructor. It also has
 the drawback that I need wrappers for the main function because you can't
 directly pass NULL function pointers as arguments. Not that I could find
-anyway. Maybe C++0x's null_ptr will solve this problem?
+anyway. Maybe C++0x's nullptr will solve this problem?
 
 Speaking of constructors and destructors, I'm not totally happy that I have
 both code and Lua defined destructors (i.e. one of each as a function pointer
