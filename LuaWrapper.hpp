@@ -533,9 +533,6 @@ int luaW__gc(lua_State* L)
     return 0;
 }
 
-// luaW_registerex is an internal function, use the wrapper function
-// luaW_register to access it.
-//
 // Run luaW_register to create a table and metatable for your class. This
 // creates a table with the name you specify filled with the function from the
 // table argument in addition to the functions new and build. This is generally
@@ -543,16 +540,12 @@ int luaW__gc(lua_State* L)
 // metatable for each object if your class. These can be thought of as member
 // functions or methods. 
 //
-// You may also supply code constructors and destructors as the second and
-// third template arguments, for classes that do not have a default constructor
-// or that require special set up or tear down. You may specify NULL as the
-// constructor, which means that you will not be able to call the new function
-// on your class table. You will need to manually push objects from C++. By
-// default, the default constructor is used to create objects and a simple call
-// to delete is used to destroy them. These functions are templates because in
-// some cases the default constructor does not exist, and making it a template
-// argument rather than a regular argument prevents instaniation of the default
-// constructor.
+// You may also supply code constructors and destructors for classes that do
+// not have a default constructor or that require special set up or tear down.
+// You may specify NULL as the constructor, which means that you will not be
+// able to call the new function on your class table. You will need to manually
+// push objects from C++. By default, the default constructor is used to create
+// objects and a simple call to delete is used to destroy them.
 //
 // By default, LuaWrapper uses the address of C++ object to identify unique
 // objects. In some cases this is not desired, such as in the case of
@@ -561,7 +554,7 @@ int luaW__gc(lua_State* L)
 // identifier function which is responsible for pushing a key representing your
 // object on to the stack.
 template <typename T>
-void luaW_registerex(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, T* (*allocator)(lua_State*), void (*deallocator)(lua_State*, T*), void (*identifier)(lua_State*, T*))
+void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, T* (*allocator)(lua_State*), void (*deallocator)(lua_State*, T*), void (*identifier)(lua_State*, T*))
 {
     LuaWrapper<T>::classname = classname;
     LuaWrapper<T>::identifier = identifier;
@@ -621,28 +614,22 @@ void luaW_registerex(lua_State* L, const char* classname, const luaL_reg* table,
     lua_pop(L, 1); //
 }
 
-template <typename T,  T* (*allocator)(lua_State*) = luaW_defaultallocator<T>, void (*deallocator)(lua_State*, T*) = luaW_defaultdeallocator<T> >
-void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
+template <typename T>
+void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, T* (*allocator)(lua_State*), void (*deallocator)(lua_State*, T*))
 {
-    luaW_registerex<T>(L, classname, table, metatable, allocator, deallocator, identifier);
+    luaW_register<T>(L, classname, table, metatable, allocator, deallocator, luaW_defaultidentifier<T>);
 }
 
-template <typename T, int, void (*deallocator)(lua_State*, T*) = luaW_defaultdeallocator<T> >
-void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
+template <typename T>
+void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, T* (*allocator)(lua_State*))
 {
-    luaW_registerex<T>(L, classname, table, metatable, NULL, deallocator, identifier);
+    luaW_register<T>(L, classname, table, metatable, allocator, luaW_defaultdeallocator<T>, luaW_defaultidentifier<T>);
 }
 
-template <typename T, T* (*allocator)(lua_State*) = luaW_defaultallocator<T>, int >
-void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
+template <typename T>
+void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable)
 {
-    luaW_registerex<T>(L, classname, table, metatable, allocator, NULL, identifier);
-}
-
-template <typename T, int, int >
-void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
-{
-    luaW_registerex<T>(L, classname, table, metatable, NULL, NULL, identifier);
+    luaW_register<T>(L, classname, table, metatable, luaW_defaultallocator<T>, luaW_defaultdeallocator<T>, luaW_defaultidentifier<T>);
 }
 
 // luaW_extend is used to declare that class T inherits from class U. All
