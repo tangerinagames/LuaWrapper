@@ -554,7 +554,7 @@ int luaW__gc(lua_State* L)
 // identifier function which is responsible for pushing a key representing your
 // object on to the stack.
 template <typename T>
-void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, T* (*allocator)(lua_State*), void (*deallocator)(lua_State*, T*), void (*identifier)(lua_State*, T*))
+void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, T* (*allocator)(lua_State*) = luaW_defaultallocator<T>, void (*deallocator)(lua_State*, T*) = luaW_defaultdeallocator<T>, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
 {
     LuaWrapper<T>::classname = classname;
     LuaWrapper<T>::identifier = identifier;
@@ -612,24 +612,6 @@ void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, c
 
     lua_setmetatable(L, -2); // T
     lua_pop(L, 1); //
-}
-
-template <typename T>
-void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, T* (*allocator)(lua_State*), void (*deallocator)(lua_State*, T*))
-{
-    luaW_register<T>(L, classname, table, metatable, allocator, deallocator, luaW_defaultidentifier<T>);
-}
-
-template <typename T>
-void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, T* (*allocator)(lua_State*))
-{
-    luaW_register<T>(L, classname, table, metatable, allocator, luaW_defaultdeallocator<T>, luaW_defaultidentifier<T>);
-}
-
-template <typename T>
-void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable)
-{
-    luaW_register<T>(L, classname, table, metatable, luaW_defaultallocator<T>, luaW_defaultdeallocator<T>, luaW_defaultidentifier<T>);
 }
 
 // luaW_extend is used to declare that class T inherits from class U. All
