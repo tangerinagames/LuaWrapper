@@ -39,10 +39,8 @@
 // an object is created in C++, but would like to pass ownership over to Lua,
 // luaW_hold may be used.
 //
-// Additionally, metamethods __ctor and __dtor are provided, and will run when
-// objects are created or destroyed respectively. Objects can also declare a
-// list of other tables that they extend, and they will inherit all functions
-// from that class.
+// Objects can also declare a list of other tables that they extend, and they
+// will inherit all functions from that class.
 
 #ifndef LUA_WRAPPER_H_
 #define LUA_WRAPPER_H_
@@ -543,10 +541,7 @@ int luaW__gc(lua_State* L)
 // table argument in addition to the functions new and build. This is generally
 // for things you think of as static methods in C++. The metatable becomes a
 // metatable for each object if your class. These can be thought of as member
-// functions or methods. You may specify a null terminated array of strings
-// representing the classes you wish to extend. All functions in the base class
-// will be available to the derived class (except when they share a function
-// name, in which case the derived class's function wins).
+// functions or methods. 
 //
 // You may also supply code constructors and destructors as the second and
 // third template arguments, for classes that do not have a default constructor
@@ -650,10 +645,11 @@ void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, c
     luaW_registerex<T>(L, classname, table, metatable, NULL, NULL, identifier);
 }
 
-// luaW_extend is used to declare that class T inherits from class U, and it
-// should have access to all of its metatable functions. This also allows
-// luaW_to<T> to cast your object apropriately, as casts straight through a
-// void pointer do not work.
+// luaW_extend is used to declare that class T inherits from class U. All
+// functions in the base class will be available to the derived class (except
+// when they share a function name, in which case the derived class's function
+// wins). This also allows luaW_to<T> to cast your object apropriately, as
+// casts straight through a void pointer do not work.
 template <typename T, typename U>
 bool luaW_extend(lua_State* L)
 {
