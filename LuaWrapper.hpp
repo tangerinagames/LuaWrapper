@@ -601,24 +601,27 @@ void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, c
     lua_pop(L, 1); //
 }
 
+#include <iostream>
+
 // luaW_extend is used to declare that class T inherits from class U. All
 // functions in the base class will be available to the derived class (except
 // when they share a function name, in which case the derived class's function
 // wins). This also allows luaW_to<T> to cast your object apropriately, as
 // casts straight through a void pointer do not work.
 template <typename T, typename U>
-bool luaW_extend(lua_State* L)
+void luaW_extend(lua_State* L)
 {
+    if(!LuaWrapper<T>::classname)
+        luaL_error(L, "attempting to call extend on a class that has not been registered");
+
+    if(!LuaWrapper<U>::classname)
+        luaL_error(L, "attempting to extend %s by a class that has not been registered", LuaWrapper<T>::classname);
+
     LuaWrapper<T>::cast = luaW_cast<T, U>;
 
     // Copy key/value pairs from extended metatables
     luaL_getmetatable(L, LuaWrapper<T>::classname); // mt
     luaL_getmetatable(L, LuaWrapper<U>::classname); // mt emt
-    if(lua_isnoneornil(L, -2) || lua_isnoneornil(L, -1))
-    {
-        lua_pop(L, 2);
-        return false;
-    }
     lua_getfield(L, -2, LUAW_EXTENDS_KEY); // mt emt mt.__extends
     lua_pushvalue(L, -2); // mt emt mt.__extends emt
     lua_setfield(L, -2, LuaWrapper<U>::classname); // mt emt mt.__extends
@@ -652,7 +655,6 @@ bool luaW_extend(lua_State* L)
         }
     }
     lua_pop(L, 2); 
-    return true;
 }
 
 #undef luaW_getregistry
