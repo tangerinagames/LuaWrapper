@@ -39,8 +39,7 @@
 // an object is created in C++, but would like to pass ownership over to Lua,
 // luaW_hold may be used.
 //
-// Objects can also declare a list of other tables that they extend, and they
-// will inherit all functions from that class.
+// For more information see the README
 
 #ifndef LUA_WRAPPER_H_
 #define LUA_WRAPPER_H_
@@ -59,8 +58,7 @@ extern "C"
 #define luaW_setregistry(L, s) \
      lua_setfield(L, LUA_REGISTRYINDEX, s)
 
-#define LUAW_CTOR_KEY "__ctor"
-#define LUAW_DTOR_KEY "__dtor"
+#define LUAW_POSTCTOR_KEY "__postctor"
 #define LUAW_EXTENDS_KEY "__extends"
 #define LUAW_STORAGE_KEY "__storage"
 #define LUAW_COUNT_KEY "__counts"
@@ -69,7 +67,7 @@ extern "C"
 
 // These are the default allocator and deallocator. If you would prefer an
 // alternative option, you may select a different function when registering
-// your class
+// your class.
 template <typename T>
 T* luaW_defaultallocator(lua_State*)
 {
@@ -237,11 +235,11 @@ void luaW_push(lua_State* L, T* obj)
     lua_setmetatable(L, -2); // ... obj
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... obj LuaWrapper
     lua_getfield(L, -1, LUAW_COUNT_KEY); // ... obj LuaWrapper LuaWrapper.counts
-    LuaWrapper<T>::identifier(L, obj); // ... obj LuaWrapper LuaWrapper.counts lud
+    LuaWrapper<T>::identifier(L, obj); // ... obj LuaWrapper LuaWrapper.counts id
     lua_gettable(L, -2); // ... obj LuaWrapper LuaWrapper.counts count
     int count = lua_tointeger(L, -1);
-    LuaWrapper<T>::identifier(L, obj); // ... obj LuaWrapper LuaWrapper.counts count lud
-    lua_pushinteger(L, count+1); // ... obj LuaWrapper LuaWrapper.counts count lud count+1
+    LuaWrapper<T>::identifier(L, obj); // ... obj LuaWrapper LuaWrapper.counts count id
+    lua_pushinteger(L, count+1); // ... obj LuaWrapper LuaWrapper.counts count id count+1
     lua_settable(L, -4); // ... obj LuaWrapper LuaWrapper.counts count
     lua_pop(L, 3); // ... obj
 }
@@ -258,7 +256,7 @@ bool luaW_hold(lua_State* L, T* obj)
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... LuaWrapper
 
     lua_getfield(L, -1, LUAW_HOLDS_KEY); // ... LuaWrapper LuaWrapper.holds
-    LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.holds lud
+    LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.holds id
     lua_rawget(L, -2); // ... LuaWrapper LuaWrapper.holds hold
     bool held = lua_toboolean(L, -1);
     // If it's not held, hold it
@@ -266,27 +264,27 @@ bool luaW_hold(lua_State* L, T* obj)
     {
         // Apply hold boolean
         lua_pop(L, 1); // ... LuaWrapper LuaWrapper.holds
-        LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.holds lud
-        lua_pushboolean(L, true); // ... LuaWrapper LuaWrapper.holds lud true
+        LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.holds id
+        lua_pushboolean(L, true); // ... LuaWrapper LuaWrapper.holds id true
         lua_rawset(L, -3); // ... LuaWrapper LuaWrapper.holds
 
         // Check count, if there's at least one, add a storage table
         lua_pop(L, 1); // ... LuaWrapper
         lua_getfield(L, -1, LUAW_COUNT_KEY); // ... LuaWrapper LuaWrapper.counts
-        LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.counts lud
+        LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.counts id
         lua_rawget(L, -2); // ... LuaWrapper LuaWrapper.counts count
         if (lua_tointeger(L, -1) > 0)
         {
             // Add the storage table if there isn't one already
             lua_pop(L, 2);
             lua_getfield(L, -1, LUAW_STORAGE_KEY); // ... LuaWrapper LuaWrapper.storage
-            LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.storage lud
+            LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.storage id
             lua_rawget(L, -2); // ... LuaWrapper LuaWrapper.storage store
             if (lua_isnoneornil(L, -1))
             {
                 lua_pop(L, 1); // ... LuaWrapper LuaWrapper.storage
-                LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.storage lud
-                lua_newtable(L); // ... LuaWrapper LuaWrapper.storage lud store
+                LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.storage id
+                lua_newtable(L); // ... LuaWrapper LuaWrapper.storage id store
                 lua_rawset(L, -3); // ... LuaWrapper LuaWrapper.storage
                 lua_pop(L, 2); // ...
             }
@@ -300,40 +298,51 @@ bool luaW_hold(lua_State* L, T* obj)
 // Releases LuaWrapper's hold on an object. This allows the user to remove
 // all references to an object in Lua and ensure that Lua will not attempt to
 // garbage collect it.
+//
+// This function takes the index of the identifier for an object rather than
+// the object itself. This is because needs to be able to run after the object
+// has already been deallocated.
 template <typename T>
-void luaW_release(lua_State* L, T* obj)
+void luaW_release(lua_State* L, int index)
 {
-    luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... LuaWrapper
-    lua_getfield(L, -1, LUAW_HOLDS_KEY); // ... LuaWrapper LuaWrapper.holds
-    LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.holds lud
-    lua_pushnil(L); // ... LuaWrapper LuaWrapper.counts lud nil
-    lua_settable(L, -3); // ... LuaWrapper LuaWrapper.counts count
-    lua_pop(L, 1); // ... LuaWrapper
+    luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... id ... LuaWrapper
+    lua_getfield(L, -1, LUAW_HOLDS_KEY); // ... id ... LuaWrapper LuaWrapper.holds
+    lua_pushvalue(L, (index>0) ? index : index-2); // ... id ... LuaWrapper LuaWrapper.holds id
+    lua_pushnil(L); // ... id ... LuaWrapper LuaWrapper.holds id nil
+    lua_settable(L, -3); // ... id ... LuaWrapper LuaWrapper.holds
+    lua_pop(L, 2); // ... id ... 
 }
 
 // When luaW_clean is called on an object, values stored on it's Lua store
 // become no longer accessible.
+//
+// This function takes the index of the identifier for an object rather than
+// the object itself. This is because needs to be able to run after the object
+// has already been deallocated.
 template <typename T>
-void luaW_clean(lua_State* L, T* obj)
+void luaW_clean(lua_State* L, int index)
 {
-    lua_getfield(L, -1, LUAW_STORAGE_KEY); // ... LuaWrapper LuaWrapper.storage
-    LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.storage lud
-    lua_pushnil(L); // ... LuaWrapper LuaWrapper.storage lud nil
-    lua_settable(L, -3);  // ... LuaWrapper LuaWrapper.store
-    lua_pop(L, 2); // ...
+    luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... id ... LuaWrapper
+    lua_getfield(L, -1, LUAW_STORAGE_KEY); // ... id ... LuaWrapper LuaWrapper.storage
+    lua_pushvalue(L, (index>0) ? index : index-2); // ... id ... LuaWrapper LuaWrapper.storage id
+    lua_pushnil(L); // ... id ... LuaWrapper LuaWrapper.storage id nil
+    lua_settable(L, -3);  // ... id ... LuaWrapper LuaWrapper.store
+    lua_pop(L, 2); // ... id ...
 }
 
 // This function is generally called from Lua, not C++
 //
-// Calls the lua defined constructor ("__ctor") on a userdata. Assumes the
+// Calls the lua post-constructor ("__postctor") on a userdata. Assumes the
 // userdata is on top of the stack, and numargs arguments are below it. This
-// runs the CTOR_KEY function on T's metatable, using the object as the first
-// argument and whatever else is below it as the rest of the arguments
+// runs the LUAW_POSTCTOR_KEY function on T's metatable, using the object
+// as the first argument and whatever else is below it as the rest of the
+// arguments This exists to allow types to adjust values in thier storage
+// table, which can not be created until after the constructor is called.
 template <typename T>
-void luaW_constructor(lua_State* L, int numargs)
+void luaW_postconstructor(lua_State* L, int numargs)
 {
     // ... ud
-    lua_getfield(L, -1, LUAW_CTOR_KEY); // ... ud ud.__ctor
+    lua_getfield(L, -1, LUAW_POSTCTOR_KEY); // ... ud ud.__ctor
     if (lua_type(L, -1) == LUA_TFUNCTION)
     {
         lua_pushvalue(L, -2); // ... ud ud.__ctor ud
@@ -350,30 +359,8 @@ void luaW_constructor(lua_State* L, int numargs)
 
 // This function is generally called from Lua, not C++
 //
-// Calls the lua defined destructor ("__dtor") on a userdata. this runs the
-// DTOR_KEY function on T's metatable, using the object as the first and only
-// argument
-template <typename T>
-void luaW_destructor(lua_State* L, T* obj)
-{
-    luaW_push<T>(L, obj); // ... obj
-    lua_getfield(L, -1, LUAW_DTOR_KEY); // ... obj obj.__dtor
-    if (lua_type(L, -1) == LUA_TFUNCTION)
-    {
-        lua_pushvalue(L, -2); // ... obj obj.__ctor obj
-        lua_call(L, 1, 0); // ... obj
-        lua_pop(L, 1); // ...
-    }
-    else
-    {
-        lua_pop(L, 2); // ...
-    }
-}
-
-// This function is generally called from Lua, not C++
-//
-// Creates an object of type T and calls the constructor on it with the values
-// on the stack as arguments to it's constructor
+// Creates an object of type T using the constructor and subsequently calls the
+// post-constructor on it.
 template <typename T>
 int luaW_new(lua_State* L)
 {
@@ -381,7 +368,7 @@ int luaW_new(lua_State* L)
     T* obj = LuaWrapper<T>::allocator(L);
     luaW_push<T>(L, obj);
     luaW_hold<T>(L, obj);
-    luaW_constructor<T>(L, numargs);
+    luaW_postconstructor<T>(L, numargs);
     return 1;
 }
 
@@ -452,7 +439,7 @@ int luaW__index(lua_State* L)
     T* obj = luaW_to<T>(L, 1);
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // obj key LuaWrapper
     lua_getfield(L, -1, LUAW_STORAGE_KEY); // obj key LuaWrapper LuaWrapper.storage
-    LuaWrapper<T>::identifier(L, obj); // obj key LuaWrapper LuaWrapper.table lud
+    LuaWrapper<T>::identifier(L, obj); // obj key LuaWrapper LuaWrapper.table id
     lua_rawget(L, -2); // obj key LuaWrapper LuaWrapper.table table
     if (!lua_isnoneornil(L, -1))
     {
@@ -490,7 +477,7 @@ int luaW__newindex(lua_State* L)
     T* obj = luaW_to<T>(L, 1);
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // obj key value LuaWrapper
     lua_getfield(L, -1, LUAW_STORAGE_KEY); // obj key value LuaWrapper LuaWrapper.storage
-    LuaWrapper<T>::identifier(L, obj); // obj key value LuaWrapper LuaWrapper.storage lud
+    LuaWrapper<T>::identifier(L, obj); // obj key value LuaWrapper LuaWrapper.storage id
     lua_rawget(L, -2); // obj key value LuaWrapper LuaWrapper.storage store
     if (!lua_isnoneornil(L, -1))
     {
@@ -512,24 +499,24 @@ int luaW__gc(lua_State* L)
 {
     // obj
     T* obj = luaW_to<T>(L, 1);
-    luaW_getregistry(L, LUAW_WRAPPER_KEY); // obj LuaWrapper
-    lua_getfield(L, -1, LUAW_COUNT_KEY); // obj LuaWrapper LuaWrapper.counts
-    LuaWrapper<T>::identifier(L, obj); // obj LuaWrapper LuaWrapper.counts lud
-    lua_gettable(L, -2); // obj LuaWrapper LuaWrapper.counts count
+    LuaWrapper<T>::identifier(L, obj); // obj id
+    luaW_getregistry(L, LUAW_WRAPPER_KEY); // obj id LuaWrapper
+    lua_getfield(L, -1, LUAW_COUNT_KEY); // obj id LuaWrapper LuaWrapper.counts
+    LuaWrapper<T>::identifier(L, obj); // obj id LuaWrapper LuaWrapper.counts id
+    lua_gettable(L, -2); // obj id LuaWrapper LuaWrapper.counts count
     int count = lua_tointeger(L, -1);
-    LuaWrapper<T>::identifier(L, obj); // obj LuaWrapper LuaWrapper.counts count lud
-    lua_pushinteger(L, count-1); // obj LuaWrapper LuaWrapper.counts count lud count-1
-    lua_settable(L, -4); // obj LuaWrapper LuaWrapper.counts count
-    lua_pop(L, 3); // obj LuaWrapper
+    lua_pushvalue(L, 2); // obj id LuaWrapper LuaWrapper.counts count id
+    lua_pushinteger(L, count-1); // obj id LuaWrapper LuaWrapper.counts count id count-1
+    lua_settable(L, -4); // obj id LuaWrapper LuaWrapper.counts count
 
     if (obj && 1 == count)
     {
-        luaW_destructor<T>(L, obj);
-        luaW_release<T>(L, obj);
-        luaW_clean<T>(L, obj);
         if (LuaWrapper<T>::deallocator)
             LuaWrapper<T>::deallocator(L, obj);
+        luaW_release<T>(L, 2);
+        luaW_clean<T>(L, 2);
     }
+    lua_pop(L, 3); // obj LuaWrapper
     return 0;
 }
 
@@ -540,11 +527,11 @@ int luaW__gc(lua_State* L)
 // metatable for each object if your class. These can be thought of as member
 // functions or methods. 
 //
-// You may also supply code constructors and destructors for classes that do
-// not have a default constructor or that require special set up or tear down.
-// You may specify NULL as the constructor, which means that you will not be
-// able to call the new function on your class table. You will need to manually
-// push objects from C++. By default, the default constructor is used to create
+// You may also supply constructors and destructors for classes that do not
+// have a default constructor or that require special set up or tear down. You
+// may specify NULL as the constructor, which means that you will not be able
+// to call the new function on your class table. You will need to manually push
+// objects from C++. By default, the default constructor is used to create
 // objects and a simple call to delete is used to destroy them.
 //
 // By default, LuaWrapper uses the address of C++ object to identify unique
