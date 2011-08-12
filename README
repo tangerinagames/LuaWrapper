@@ -11,7 +11,7 @@ Objects can be created in either Lua or C++, and passed back and forth.
 
 In Lua, the objects are userdata, but through tricky use of metatables, they
 can be treated almost identically to tables. Each userdata has a __index and
-__newindex function that maps to a table hidden in the registry. 
+__newindex function that maps to a table hidden storage table in the registry.
 
 The main functions of interest are the following:
  luaW_is<T>
@@ -40,12 +40,15 @@ things you think of as static methods in C++. The metatable becomes a metatable
 for each object if your class. These can be thought of as member functions or
 methods.
 
-You may also supply code constructors and destructors for classes that do not
-have a default constructor or that require special set up or tear down. You may
+You may also supply constructors and destructors for classes that do not have
+a default constructor or that require special set up or tear down. You may
 specify NULL as the constructor, which means that you will not be able to call
 the new function on your class table. You will need to manually push objects
-from C++. By default, the default constructor is used to create objects and a
-simple call to delete is used to destroy them. 
+from C++. By default, the default constructor is used to create objects and
+a simple call to delete is used to destroy them. When using the constructor,
+you do not have access to the userdata's storage table. If you want to add or
+adjust values to the storage table you can use the special post constructor
+metamethod ("__postctor" or LUAW_POSTCTOR_KEY).
 
 By default, LuaWrapper uses the address of C++ object to identify unique
 objects. In some cases this is not desired, such as in the case of
@@ -63,34 +66,14 @@ class's function wins).
 
 Pointer Ownership:
 
-Objects created from within Lua (or that are created through luaW_new or
-luaW_build) are considered to be owned by Lua.  Ownership merely means that
+Objects created from within Lua scripts (or that are created through luaW_new or
+luaW_build) are considered to be owned by Lua. Ownership merely means that
 when all references to it are removed, the garbage collector will delete the
-object.  An object created in C++ and pushed to Lua is not considered owned
-unless luaW_hold is run on it.  LuaWrapper maintains its own reference counting
+object. An object created in C++ and pushed to Lua is not considered owned
+unless luaW_hold is run on it. LuaWrapper maintains its own reference counting
 in order to prevent the __gc metamethod from deleting pointers to objects that
-are still in use. If an object is created in Lua and you do not want it to be
-owned by Lua, you may call luaW_release on it. It is now the programmer's
-responsibility to run the Lua destructor (if necessary) with luaW_destructor,
-as well as remove the lua storage kept in the registry with luaW_clean. (These
-are called automatically when garbage collecting Lua-owned userdata).
+are still in use. If an object is created in Lua and you do not want it to
+be owned by Lua, you may call luaW_release on it. It is now the programmer's
+responsibility to run luaW_clean. (This is called automatically when garbage
+collecting Lua-owned userdata).
 
-Construction and Destruction:
-
-As mentioned above, you can specify a function to construct and destruct your
-objects with luaW_register. Before I realized the case of classes without
-default constructors I simply used the metamethods __ctor and __dtor to handle
-cases where I wanted code to run immediately upon creation of a userdata.
-Support for the __ctor and __dtor metamethod can probably be removed, but I'm
-going to leave it around for a while to see if it becomes useful for anything.
-
-To do:
-
-I'm not totally happy that I have both code and Lua defined destructors (i.e.
-one of each as a function pointer maintained in C++ code, and one of each
-stored on the metatable). I need to determine if this is worth keeping around
-of if the Lua based ones ought to be scrapped.
-
-Maybe there should be a way to specify that you don't want certain types to be
-treated as a table? (i.e. tell it to not add the __index and __newindex
-metamethods)

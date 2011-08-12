@@ -13,9 +13,6 @@
 // immediately. It even supports class inheritance to a certain degree. Objects
 // can be created in either Lua or C++, and passed back and forth.
 //
-// In Lua, the objects are userdata, but through tricky use of metatables, they
-// can be treated almost identically to tables.
-//
 // The main functions of interest are the following:
 //  luaW_is<T>
 //  luaW_to<T>
@@ -28,18 +25,11 @@
 //  luaW_clean<T>
 //
 // These functions allow you to manipulate arbitrary classes just like you
-// would the primitive types (e.g. numbers or strings). When all references
-// to a userdata removed, the userdata will be deleted. In some cases, this
-// may not be what you want, such as cases where an object is created in Lua,
-// then passed to C++ code which owns it from then on. In these cases, you
-// can call luaW_release, which releases LuaWrapper's hold on the userdata.
-// This prevents it from being deallocated when all references disappear.
-// When this is called, you are now responsible for calling luaW_clean and
-// luaW_destructor manually when you are done with the object. Conversely, if
-// an object is created in C++, but would like to pass ownership over to Lua,
-// luaW_hold may be used.
+// would the primitive types (e.g. numbers or strings). If you are familiar
+// with the normal Lua API the behavior of these functions should be very
+// intuative.
 //
-// For more information see the README
+// For more information see the README and the comments below
 
 #ifndef LUA_WRAPPER_H_
 #define LUA_WRAPPER_H_
@@ -133,8 +123,6 @@ luaW_Userdata luaW_cast(const luaW_Userdata& obj)
     return luaW_Userdata(static_cast<U*>(static_cast<T*>(obj.data)), LuaWrapper<U>::cast);
 }
 
-// [-0, +0, -]
-//
 // Analogous to lua_is(boolean|string|*)
 //
 // Returns 1 if the value at the given acceptable index is of type T (or if
@@ -150,14 +138,14 @@ bool luaW_is(lua_State *L, int index, bool strict = false)
         equal = lua_rawequal(L, -1, -2);
         if (!equal && !strict)
         {
-            lua_getfield(L, -2, LUAW_EXTENDS_KEY); // ... ud ... udmt Tmt udmt.__extends
+            lua_getfield(L, -2, LUAW_EXTENDS_KEY); // ... ud ... udmt Tmt udmt.extends
             for (lua_pushnil(L); lua_next(L, -2); lua_pop(L, 1))
             {
-                // ... ud ... udmt Tmt udmt.__extends k v
+                // ... ud ... udmt Tmt udmt.extends k v
                 equal = lua_rawequal(L, -1, -4);
                 if (equal)
                 {
-                    lua_pop(L, 2); // ... ud ... udmt Tmt udmt.__extends
+                    lua_pop(L, 2); // ... ud ... udmt Tmt udmt.extends
                     break;
                 }
             }
@@ -168,12 +156,10 @@ bool luaW_is(lua_State *L, int index, bool strict = false)
     return equal;
 }
 
-// [-0, +0, -]
-//
 // Analogous to lua_to(boolean|string|*)
 //
-// Converts the given acceptable index to a T*. That value must be of type T;
-// otherwise, returns NULL.
+// Converts the given acceptable index to a T*. That value must be of (or
+// convertable to) type T; otherwise, returns NULL.
 template <typename T>
 T* luaW_to(lua_State* L, int index, bool strict = false)
 {
@@ -191,11 +177,10 @@ T* luaW_to(lua_State* L, int index, bool strict = false)
     return NULL;
 }
 
-// [-0, +0, -]
-//
 // Analogous to luaL_check(boolean|string|*)
 //
-// Checks whether the function argument at index is a T and returns this object
+// Converts the given acceptable index to a T*. That value must be of (or
+// convertable to) type T; otherwise, an error is raised.
 template <typename T>
 T* luaW_check(lua_State* L, int index, bool strict = false)
 {
@@ -218,13 +203,11 @@ T* luaW_check(lua_State* L, int index, bool strict = false)
     return obj;
 }
 
-// [-0, +1, -]
-//
 // Analogous to lua_push(boolean|string|*)
 //
 // Pushes a userdata of type T onto the stack. If this object already exists in
 // the Lua environment, it will assign the existing store to it. Otherwise, a
-// new store will be created for it.
+// new storage table will be created for it.
 template <typename T>
 void luaW_push(lua_State* L, T* obj)
 {
@@ -330,25 +313,26 @@ void luaW_clean(lua_State* L, int index)
     lua_pop(L, 2); // ... id ...
 }
 
-// This function is generally called from Lua, not C++
+// This function is called from Lua, not C++
 //
-// Calls the lua post-constructor ("__postctor") on a userdata. Assumes the
-// userdata is on top of the stack, and numargs arguments are below it. This
-// runs the LUAW_POSTCTOR_KEY function on T's metatable, using the object
-// as the first argument and whatever else is below it as the rest of the
-// arguments This exists to allow types to adjust values in thier storage
-// table, which can not be created until after the constructor is called.
+// Calls the lua post-constructor (LUAW_POSTCTOR_KEY or "__postctor") on a
+// userdata. Assumes the userdata is on top of the stack, and numargs arguments
+// are below it. This runs the LUAW_POSTCTOR_KEY function on T's metatable,
+// using the object as the first argument and whatever else is below it as
+// the rest of the arguments This exists to allow types to adjust values in
+// thier storage table, which can not be created until after the constructor is
+// called.
 template <typename T>
 void luaW_postconstructor(lua_State* L, int numargs)
 {
     // ... ud
-    lua_getfield(L, -1, LUAW_POSTCTOR_KEY); // ... ud ud.__ctor
+    lua_getfield(L, -1, LUAW_POSTCTOR_KEY); // ... ud ud.__postctor
     if (lua_type(L, -1) == LUA_TFUNCTION)
     {
-        lua_pushvalue(L, -2); // ... ud ud.__ctor ud
-        lua_insert(L, 1); // ud ... ud ud.__ctor
-        lua_insert(L, 2); // ud ud.__ctor ... ud
-        lua_insert(L, 3); // ud ud.__ctor ud  ...
+        lua_pushvalue(L, -2); // ... ud ud.__postctor ud
+        lua_insert(L, 1); // ud ... ud ud.__postctor
+        lua_insert(L, 2); // ud ud.__postctor ... ud
+        lua_insert(L, 3); // ud ud.__postctor ud  ...
         lua_call(L, numargs+1, 0); // ud
     }
     else
@@ -412,7 +396,7 @@ void luaW_builder(lua_State* L)
 // This function is generally called from Lua, not C++
 //
 // Creates an object of type T and initializes it using its builder to
-// initialize it
+// initialize it.
 template <typename T>
 int luaW_build(lua_State* L)
 {
@@ -465,7 +449,7 @@ int luaW__index(lua_State* L)
 
 // This function is called from Lua, not C++
 //
-// The default metamethod to call when createing a new index on lua userdata
+// The default metamethod to call when creating a new index on lua userdata
 // representing an object of type T. This will index into the the userdata's
 // environment table that it keeps for personal storage. This is done so
 // individual userdata can be treated as a table, and can hold thier own
@@ -491,9 +475,8 @@ int luaW__newindex(lua_State* L)
 // This function is called from Lua, not C++
 //
 // The __gc metamethod handles cleaning up userdata. The userdata's reference
-// count is decremented, and if this is the final reference to the userdata,
-// the __dtor metamethod is called, its environment table is nil'd and pointer
-// deleted.
+// count is decremented and if this is the final reference to the userdata its
+// environment table is nil'd and pointer deleted with the destructor callback.
 template <typename T>
 int luaW__gc(lua_State* L)
 {
@@ -506,10 +489,10 @@ int luaW__gc(lua_State* L)
     lua_gettable(L, -2); // obj id LuaWrapper LuaWrapper.counts count
     int count = lua_tointeger(L, -1);
     lua_pushvalue(L, 2); // obj id LuaWrapper LuaWrapper.counts count id
-    lua_pushinteger(L, count-1); // obj id LuaWrapper LuaWrapper.counts count id count-1
+    lua_pushinteger(L, --count); // obj id LuaWrapper LuaWrapper.counts count id count-1
     lua_settable(L, -4); // obj id LuaWrapper LuaWrapper.counts count
 
-    if (obj && 1 == count)
+    if (obj && 0 == count)
     {
         if (LuaWrapper<T>::deallocator)
             LuaWrapper<T>::deallocator(L, obj);
@@ -534,7 +517,7 @@ int luaW__gc(lua_State* L)
 // objects from C++. By default, the default constructor is used to create
 // objects and a simple call to delete is used to destroy them.
 //
-// By default, LuaWrapper uses the address of C++ object to identify unique
+// By default LuaWrapper uses the address of C++ object to identify unique
 // objects. In some cases this is not desired, such as in the case of
 // shared_ptrs. Two shared_ptrs may themselves have unique locations in memory
 // but still represent the same object. For cases like that, you may specify an
@@ -601,8 +584,6 @@ void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, c
     lua_pop(L, 1); //
 }
 
-#include <iostream>
-
 // luaW_extend is used to declare that class T inherits from class U. All
 // functions in the base class will be available to the derived class (except
 // when they share a function name, in which case the derived class's function
@@ -612,27 +593,27 @@ template <typename T, typename U>
 void luaW_extend(lua_State* L)
 {
     if(!LuaWrapper<T>::classname)
-        luaL_error(L, "attempting to call extend on a class that has not been registered");
+        luaL_error(L, "attempting to call extend on a type that has not been registered");
 
     if(!LuaWrapper<U>::classname)
-        luaL_error(L, "attempting to extend %s by a class that has not been registered", LuaWrapper<T>::classname);
+        luaL_error(L, "attempting to extend %s by a type that has not been registered", LuaWrapper<T>::classname);
 
     LuaWrapper<T>::cast = luaW_cast<T, U>;
 
     // Copy key/value pairs from extended metatables
     luaL_getmetatable(L, LuaWrapper<T>::classname); // mt
     luaL_getmetatable(L, LuaWrapper<U>::classname); // mt emt
-    lua_getfield(L, -2, LUAW_EXTENDS_KEY); // mt emt mt.__extends
-    lua_pushvalue(L, -2); // mt emt mt.__extends emt
-    lua_setfield(L, -2, LuaWrapper<U>::classname); // mt emt mt.__extends
-    lua_getfield(L, -2, LUAW_EXTENDS_KEY); // mt emt mt.__extends emt.__extends
+    lua_getfield(L, -2, LUAW_EXTENDS_KEY); // mt emt mt.extends
+    lua_pushvalue(L, -2); // mt emt mt.extends emt
+    lua_setfield(L, -2, LuaWrapper<U>::classname); // mt emt mt.extends
+    lua_getfield(L, -2, LUAW_EXTENDS_KEY); // mt emt mt.extends emt.extends
 
     for (lua_pushnil(L); lua_next(L, -2); lua_pop(L, 1))
     {
-        // mt emt mt.__extends emt.__extends k v
-        lua_pushvalue(L, -2); // mt emt mt.__extends emt.__extends k v k
-        lua_pushvalue(L, -2); // mt emt mt.__extends emt.__extends k v k
-        lua_rawset(L, -6); // mt emt mt.__extends emt.__extends k v
+        // mt emt mt.extends emt.extends k v
+        lua_pushvalue(L, -2); // mt emt mt.extends emt.extends k v k
+        lua_pushvalue(L, -2); // mt emt mt.extends emt.extends k v k
+        lua_rawset(L, -6); // mt emt mt.extends emt.extends k v
     }
 
     lua_pop(L, 2); // mt emt
