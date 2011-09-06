@@ -396,13 +396,16 @@ void luaW_builder(lua_State* L)
 // This function is generally called from Lua, not C++
 //
 // Creates an object of type T and initializes it using its builder to
-// initialize it.
+// initialize it. Calls post constructor with 0 arguments in case special
+// initialization is needed to set up special tables that can not be added
+// during construction
 template <typename T>
 int luaW_build(lua_State* L)
 {
     T* obj = LuaWrapper<T>::allocator(L);
     luaW_push<T>(L, obj);
     luaW_hold<T>(L, obj);
+    luaW_postconstructor<T>(L, 0);
     luaW_builder<T>(L);
     return 1;
 }
