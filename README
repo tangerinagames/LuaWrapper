@@ -9,6 +9,11 @@ not need to be precompiled; the header can simply be dropped into a project
 and used immediately. It even supports class inheritance to a certain degree.
 Objects can be created in either Lua or C++, and passed back and forth.
 
+Instructions on how to use the library follow, but a simple example project has
+been set up to see basic library usage and can be found at
+
+    https://bitbucket.org/alexames/luawrapperexample
+
 In Lua, the objects are userdata, but through tricky use of metatables, they
 can be treated almost identically to tables. Each userdata has a __index and
 __newindex function that maps to a table hidden storage table in the registry.
