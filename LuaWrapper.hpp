@@ -88,8 +88,8 @@ void luaW_defaultidentifier(lua_State* L, T* obj)
 // when and object is the type I want. This is only used internally.
 struct luaW_Userdata
 {
-    luaW_Userdata(void* data = NULL, luaW_Userdata (*cast)(const luaW_Userdata&) = NULL) 
-        : data(data), cast(cast) {}
+    luaW_Userdata(void* vptr = NULL, luaW_Userdata (*udcast)(const luaW_Userdata&) = NULL)
+        : data(vptr), cast(udcast) {}
     void* data;
     luaW_Userdata (*cast)(const luaW_Userdata&);
 };
@@ -171,7 +171,7 @@ T* luaW_to(lua_State* L, int index, bool strict = false)
         {
             ud = pud->cast(*pud);
             pud = &ud;
-        } 
+        }
         return (T*)pud->data;
     }
     return NULL;
@@ -193,7 +193,7 @@ T* luaW_check(lua_State* L, int index, bool strict = false)
         {
             ud = pud->cast(*pud);
             pud = &ud;
-        } 
+        }
         obj = (T*)pud->data;
     }
     else
@@ -293,7 +293,7 @@ void luaW_release(lua_State* L, int index)
     lua_pushvalue(L, (index>0) ? index : index-2); // ... id ... LuaWrapper LuaWrapper.holds id
     lua_pushnil(L); // ... id ... LuaWrapper LuaWrapper.holds id nil
     lua_settable(L, -3); // ... id ... LuaWrapper LuaWrapper.holds
-    lua_pop(L, 2); // ... id ... 
+    lua_pop(L, 2); // ... id ...
 }
 
 // When luaW_clean is called on an object, values stored on it's Lua store
@@ -508,7 +508,7 @@ int luaW__gc(lua_State* L)
 // table argument in addition to the functions new and build. This is generally
 // for things you think of as static methods in C++. The metatable becomes a
 // metatable for each object if your class. These can be thought of as member
-// functions or methods. 
+// functions or methods.
 //
 // You may also supply constructors and destructors for classes that do not
 // have a default constructor or that require special set up or tear down. You
@@ -635,7 +635,7 @@ void luaW_extend(lua_State* L)
             lua_pop(L, 1); // mt k v
         }
     }
-    lua_pop(L, 2); 
+    lua_pop(L, 2);
 }
 
 #undef luaW_getregistry
