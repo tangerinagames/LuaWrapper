@@ -592,7 +592,6 @@ void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, c
     luaL_register(L, NULL, metatable); // T mt
 
     lua_setmetatable(L, -2); // T
-    lua_pop(L, 1); //
 }
 
 // luaW_extend is used to declare that class T inherits from class U. All
