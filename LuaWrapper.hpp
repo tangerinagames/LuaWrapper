@@ -500,17 +500,13 @@ int luaW__gc(lua_State* L)
         lua_getfield(L, 3, LUAW_HOLDS_KEY); // obj id LuaWrapper LuaWrapper.counts LuaWrapper.holds
         lua_pushvalue(L, 2); // obj id LuaWrapper LuaWrapper.counts LuaWrapper.holds id
         lua_gettable(L, -2); // obj id LuaWrapper LuaWrapper.counts LuaWrapper.holds hold
-        if (lua_toboolean(L, -1))
+        if (lua_toboolean(L, -1) && LuaWrapper<T>::deallocator)
         {
-            if (LuaWrapper<T>::deallocator)
-            {
-                LuaWrapper<T>::deallocator(L, obj);
-            }
-            luaW_release<T>(L, 2);
+            LuaWrapper<T>::deallocator(L, obj);
         }
+        luaW_release<T>(L, 2);
         luaW_clean<T>(L, 2);
     }
-    lua_pop(L, 3); // obj LuaWrapper
     return 0;
 }
 
