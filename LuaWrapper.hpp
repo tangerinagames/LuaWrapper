@@ -258,16 +258,24 @@ bool luaW_hold(lua_State* L, T* obj)
         lua_rawget(L, -2); // ... LuaWrapper LuaWrapper.counts count
         if (lua_tointeger(L, -1) > 0)
         {
-            // Add the storage table if there isn't one already
+            // Find and attach the storage table
             lua_pop(L, 2);
             lua_getfield(L, -1, LUAW_STORAGE_KEY); // ... LuaWrapper LuaWrapper.storage
             LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.storage id
             lua_rawget(L, -2); // ... LuaWrapper LuaWrapper.storage store
+
+            // Add the storage table if there isn't one already
             if (lua_isnoneornil(L, -1))
             {
                 lua_pop(L, 1); // ... LuaWrapper LuaWrapper.storage
                 LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.storage id
                 lua_newtable(L); // ... LuaWrapper LuaWrapper.storage id store
+
+                lua_newtable(L); // ... LuaWrapper LuaWrapper.storage id store mt storemt
+                luaL_getmetatable(L, LuaWrapper<T>::classname); // ... LuaWrapper LuaWrapper.storage id store storemt mt
+                lua_setfield(L, -2, "__index"); // ... LuaWrapper LuaWrapper.storage id store storemt
+                lua_setmetatable(L, -2); // ... LuaWrapper LuaWrapper.storage id store
+
                 lua_rawset(L, -3); // ... LuaWrapper LuaWrapper.storage
                 lua_pop(L, 2); // ...
             }
@@ -415,7 +423,7 @@ int luaW_build(lua_State* L)
 // This function is called from Lua, not C++
 //
 // The default metamethod to call when indexing into lua userdata representing
-// an object of type T. This will fisrt check the userdata's environment table
+// an object of type T. This will first check the userdata's environment table
 // and if it's not found there it will check the metatable. This is done so
 // individual userdata can be treated as a table, and can hold thier own
 // values.
@@ -426,19 +434,12 @@ int luaW__index(lua_State* L)
     T* obj = luaW_to<T>(L, 1);
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // obj key LuaWrapper
     lua_getfield(L, -1, LUAW_STORAGE_KEY); // obj key LuaWrapper LuaWrapper.storage
-    LuaWrapper<T>::identifier(L, obj); // obj key LuaWrapper LuaWrapper.table id
-    lua_rawget(L, -2); // obj key LuaWrapper LuaWrapper.table table
+    LuaWrapper<T>::identifier(L, obj); // obj key LuaWrapper LuaWrapper.storage id
+    lua_rawget(L, -2); // obj key LuaWrapper LuaWrapper.storage store
     if (!lua_isnoneornil(L, -1))
     {
-        lua_pushvalue(L, -4); // obj key LuaWrapper LuaWrapper.table table key
-        lua_rawget(L, -2); // obj key LuaWrapper LuaWrapper.table table table[k]
-        if (lua_isnoneornil(L, -1))
-        {
-            lua_pop(L, 4); // obj key
-            lua_getmetatable(L, -2); // obj key mt
-            lua_pushvalue(L, -2); // obj key mt k
-            lua_rawget(L, -2); // obj key mt mt[k]
-        }
+        lua_pushvalue(L, -4); // obj key LuaWrapper LuaWrapper.storage store key
+        lua_gettable(L, -2); // obj key LuaWrapper LuaWrapper.storage store store[k]
     }
     else
     {
@@ -606,14 +607,20 @@ void luaW_extend(lua_State* L)
 
     LuaWrapper<T>::cast = luaW_cast<T, U>;
 
-    // Copy key/value pairs from extended metatables
     luaL_getmetatable(L, LuaWrapper<T>::classname); // mt
     luaL_getmetatable(L, LuaWrapper<U>::classname); // mt emt
+
+    // set __index
+    lua_newtable(L); // mt emt {}
+    lua_pushvalue(L, -2); // mt emt {} emt
+    lua_setfield(L, -2, "__index"); // mt emt {}
+    lua_setmetatable(L, -3); // mt emt
+
+    // set up reverse lookup
     lua_getfield(L, -2, LUAW_EXTENDS_KEY); // mt emt mt.extends
     lua_pushvalue(L, -2); // mt emt mt.extends emt
     lua_setfield(L, -2, LuaWrapper<U>::classname); // mt emt mt.extends
     lua_getfield(L, -2, LUAW_EXTENDS_KEY); // mt emt mt.extends emt.extends
-
     for (lua_pushnil(L); lua_next(L, -2); lua_pop(L, 1))
     {
         // mt emt mt.extends emt.extends k v
@@ -622,26 +629,7 @@ void luaW_extend(lua_State* L)
         lua_rawset(L, -6); // mt emt mt.extends emt.extends k v
     }
 
-    lua_pop(L, 2); // mt emt
-
-    for (lua_pushnil(L); lua_next(L, -2); lua_pop(L, 1))
-    {
-        // mt emt k v
-        lua_pushvalue(L, -2); // mt emt k v k
-        lua_gettable(L, -5); // mt emt k v mt[k]
-        if(lua_isnoneornil(L, -1))
-        {
-            lua_pop(L, 1); // mt emt k v
-            lua_pushvalue(L, -2); // mt emt k v k
-            lua_pushvalue(L, -2); // mt emt k v k v
-            lua_rawset(L, -6); // mt emt k v
-        }
-        else
-        {
-            lua_pop(L, 1); // mt k v
-        }
-    }
-    lua_pop(L, 2);
+    lua_pop(L, 4); // mt emt
 }
 
 #undef luaW_getregistry
