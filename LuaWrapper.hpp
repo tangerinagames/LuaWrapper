@@ -610,13 +610,13 @@ void luaW_extend(lua_State* L)
     luaL_getmetatable(L, LuaWrapper<T>::classname); // mt
     luaL_getmetatable(L, LuaWrapper<U>::classname); // mt emt
 
-    // set __index
+    // Point T's metatable __index at U's metatable for inheritance
     lua_newtable(L); // mt emt {}
     lua_pushvalue(L, -2); // mt emt {} emt
     lua_setfield(L, -2, "__index"); // mt emt {}
     lua_setmetatable(L, -3); // mt emt
 
-    // set up reverse lookup
+    // Make a list of al types that inherit from U, for type checking
     lua_getfield(L, -2, LUAW_EXTENDS_KEY); // mt emt mt.extends
     lua_pushvalue(L, -2); // mt emt mt.extends emt
     lua_setfield(L, -2, LuaWrapper<U>::classname); // mt emt mt.extends
