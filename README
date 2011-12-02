@@ -82,3 +82,12 @@ be owned by Lua, you may call luaW_release on it. It is now the programmer's
 responsibility to run luaW_clean. (This is called automatically when garbage
 collecting Lua-owned userdata).
 
+Lua Wrapper Utilities:
+
+A second file, called LuaWrapperUtil.hpp includes a number of additional
+functions that may be useful, which build upon the core LuaWrapper API. The
+main features are some functions which automatically cast interger types
+to enum types, templated getters and setters for primitives an pointers
+to objects. All functions in LuaWrapperUtil.hpp are prefixed with luaU_.
+Documentation and some examples are provided in the comments of the file.
+
