@@ -62,7 +62,6 @@ template <> void luaU_push<>(lua_State* L, const char*  val) { lua_pushstring(L,
 template <> void luaU_push<>(lua_State* L, float        val) { lua_pushnumber(L, val); }
 template <> void luaU_push<>(lua_State* L, double       val) { lua_pushnumber(L, val); }
 
-
 ///////////////////////////////////////////////////////////////////////////////
 //
 // A set of trivial getter and setter templates. These templates are designed
@@ -183,9 +182,15 @@ int luaU_getset(lua_State* L)
 {
     T* obj = luaW_check<T>(L, 1);
     if (obj && lua_gettop(L) >= 2)
+    {
         obj->*Member = luaU_check<U>(L, 2);
-    luaU_push<U>(L, obj->*Member);
-    return 1;
+        return 0;
+    }
+    else
+    {
+        luaU_push<U>(L, obj->*Member);
+        return 1;
+    }
 }
 
 template <typename T, typename U, U* T::*Member>
@@ -193,9 +198,15 @@ int luaU_getset(lua_State* L)
 {
     T* obj = luaW_check<T>(L, 1);
     if (obj && lua_gettop(L) >= 2)
+    {
         obj->*Member = luaW_to<U>(L, 2);
-    luaW_push<U>(L, obj->*Member);
-    return 1;
+        return 0;
+    }
+    else
+    {
+        luaW_push<U>(L, obj->*Member);
+        return 1;
+    }
 }
 
 template <typename T, typename U, U (T::*Getter)() const, void (T::*Setter)(U)>
@@ -203,9 +214,15 @@ int luaU_getset(lua_State* L)
 {
     T* obj = luaW_check<T>(L, 1);
     if (obj && lua_gettop(L) >= 2)
+    {
         (obj->*Setter)(luaU_check<U>(L, 2));
-    luaU_push(L, (obj->*Getter)());
-    return 1;
+        return 0;
+    }
+    else
+    {
+        luaU_push(L, (obj->*Getter)());
+        return 1;
+    }
 }
 
 template <typename T, typename U, U* (T::*Getter)() const, void (T::*Setter)(U*)>
@@ -213,9 +230,15 @@ int luaU_getset(lua_State* L)
 {
     T* obj = luaW_check<T>(L, 1);
     if (obj && lua_gettop(L) >= 2)
+    {
         (obj->*Setter)(luaW_check<U>(L, 2));
-    luaW_push(L, (obj->*Getter)());
-    return 1;
+        return 0;
+    }
+    else
+    {
+        luaW_push(L, (obj->*Getter)());
+        return 1;
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
