@@ -40,6 +40,16 @@ T luaU_checkenum(lua_State* L, int index)
     return (T)luaL_checkinteger(L, index);
 }
 
+template <typename T>
+T* luaU_checkornil(lua_State* L, int index, bool strict = false)
+{
+    if (lua_isnil(L, index))
+        return NULL;
+    else
+        return luaW_check<T>(L, index, strict);
+}
+
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 // A set of templated luaL_check and lua_push functions for use in the getters
@@ -155,7 +165,7 @@ int luaU_set(lua_State* L)
 {
     T* obj = luaW_check<T>(L, 1);
     if (obj)
-        obj->*Member = luaW_check<U>(L, 2);
+        obj->*Member = luaU_checkornil<U>(L, 2);
     return 0;
 }
 
@@ -173,7 +183,7 @@ int luaU_set(lua_State* L)
 {
     T* obj = luaW_check<T>(L, 1);
     if (obj)
-        (obj->*Setter)(luaW_check<U>(L, 2));
+        (obj->*Setter)(luaU_checkornil<U>(L, 2));
     return 0;
 }
 
@@ -199,7 +209,7 @@ int luaU_getset(lua_State* L)
     T* obj = luaW_check<T>(L, 1);
     if (obj && lua_gettop(L) >= 2)
     {
-        obj->*Member = luaW_to<U>(L, 2);
+        obj->*Member = luaU_checkornil<U>(L, 2);
         return 0;
     }
     else
@@ -231,7 +241,7 @@ int luaU_getset(lua_State* L)
     T* obj = luaW_check<T>(L, 1);
     if (obj && lua_gettop(L) >= 2)
     {
-        (obj->*Setter)(luaW_check<U>(L, 2));
+        (obj->*Setter)(luaU_checkornil<U>(L, 2));
         return 0;
     }
     else
@@ -289,7 +299,7 @@ int luaU_clone(lua_State* L)
 //     parent->AddChild(child);
 // }
 //
-template<typename T>
+template <typename T>
 void luaU_store(lua_State* L, int index, const char* storagetable)
 {
     // ... store ... item
