@@ -284,9 +284,12 @@ int luaU_clone(lua_State* L)
 
 ///////////////////////////////////////////////////////////////////////////////
 //
+// Takes the object of type T at the top of the stack and stores it in on a
+// table with the name storagetable, on the table at the specified index.
+//
 // You may manually call luaW_hold and luaW_release to handle pointer
 // ownership, but it is often easier to simply store a Lua userdata on a table
-// that is owned by its parent. This ensures that your object  will not be
+// that is owned by its parent. This ensures that your object will not be
 // prematurely freed, and that it can only be destoryed after its parent.
 //
 // e.g.
@@ -300,14 +303,17 @@ int luaU_clone(lua_State* L)
 // }
 //
 template <typename T>
-void luaU_store(lua_State* L, int index, const char* storagetable)
+void luaU_store(lua_State* L, int index, const char* storagetable, const char* key = NULL)
 {
-    // ... store ... item
-    lua_getfield(L, index, storagetable); // ... store ... item store.storagetable
-    LuaWrapper<T>::identifier(L, luaW_to<T>(L, -2)); // ... store ... item store.storagetable obj
-    lua_pushvalue(L, 2); // ... store ... item store.storagetable obj id
-    lua_settable(L, 3); // ... store ... item store.storagetable
-    lua_pop(L, 1); // ... store ... item
+    // ... store ... obj
+    lua_getfield(L, index, storagetable); // ... store ... obj store.storagetable
+    if (key)
+        lua_pushstring(L, key); // ... store ... obj store.storagetable key
+    else
+        LuaWrapper<T>::identifier(L, luaW_to<T>(L, -2)); // ... store ... obj store.storagetable key
+    lua_pushvalue(L, -3); // ... store ... obj store.storagetable key obj
+    lua_settable(L, -3); // ... store ... obj store.storagetable
+    lua_pop(L, 1); // ... store ... obj
 }
 
 /*
