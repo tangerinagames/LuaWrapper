@@ -56,21 +56,21 @@ T* luaU_checkornil(lua_State* L, int index, bool strict = false)
 // and setters below
 //
 
-template <typename U> static U luaU_check(lua_State* L, int index);
-template <> bool         luaU_check<>(lua_State* L, int index) { return lua_toboolean(L, index); }
-template <> const char*  luaU_check<>(lua_State* L, int index) { return luaL_checkstring(L, index); }
-template <> unsigned int luaU_check<>(lua_State* L, int index) { return luaL_checkinteger(L, index); }
-template <> int          luaU_check<>(lua_State* L, int index) { return luaL_checkinteger(L, index); }
-template <> float        luaU_check<>(lua_State* L, int index) { return luaL_checknumber(L, index); }
-template <> double       luaU_check<>(lua_State* L, int index) { return luaL_checknumber(L, index); }
+template <typename U> U luaU_check(lua_State* L, int index);
+template <> inline bool         luaU_check<>(lua_State* L, int index) { return lua_toboolean(L, index); }
+template <> inline const char*  luaU_check<>(lua_State* L, int index) { return luaL_checkstring(L, index); }
+template <> inline unsigned int luaU_check<>(lua_State* L, int index) { return luaL_checkinteger(L, index); }
+template <> inline int          luaU_check<>(lua_State* L, int index) { return luaL_checkinteger(L, index); }
+template <> inline float        luaU_check<>(lua_State* L, int index) { return luaL_checknumber(L, index); }
+template <> inline double       luaU_check<>(lua_State* L, int index) { return luaL_checknumber(L, index); }
 
-template <typename U> static void luaU_push(lua_State* L, U val);
-template <> void luaU_push<>(lua_State* L, bool         val) { lua_pushboolean(L, val); }
-template <> void luaU_push<>(lua_State* L, int          val) { lua_pushinteger(L, val); }
-template <> void luaU_push<>(lua_State* L, unsigned int val) { lua_pushinteger(L, val); }
-template <> void luaU_push<>(lua_State* L, const char*  val) { lua_pushstring(L, val); }
-template <> void luaU_push<>(lua_State* L, float        val) { lua_pushnumber(L, val); }
-template <> void luaU_push<>(lua_State* L, double       val) { lua_pushnumber(L, val); }
+template <typename U> void luaU_push(lua_State* L, const U& val);
+template <> inline void luaU_push<>(lua_State* L, const bool&         val) { lua_pushboolean(L, val); }
+template <> inline void luaU_push<>(lua_State* L, const int&          val) { lua_pushinteger(L, val); }
+template <> inline void luaU_push<>(lua_State* L, const unsigned int& val) { lua_pushinteger(L, val); }
+template <> inline void luaU_push<>(lua_State* L, const char* const&  val) { lua_pushstring(L, val); }
+template <> inline void luaU_push<>(lua_State* L, const float&        val) { lua_pushnumber(L, val); }
+template <> inline void luaU_push<>(lua_State* L, const double&       val) { lua_pushnumber(L, val); }
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -143,6 +143,14 @@ int luaU_get(lua_State* L)
     return 1;
 }
 
+template <typename T, typename U, const U& (T::*Getter)() const>
+int luaU_get(lua_State* L)
+{
+    T* obj = luaW_check<T>(L, 1);
+    luaU_push(L, (obj->*Getter)());
+    return 1;
+}
+
 template <typename T, typename U, U* (T::*Getter)() const>
 int luaU_get(lua_State* L)
 {
@@ -170,6 +178,15 @@ int luaU_set(lua_State* L)
 }
 
 template <typename T, typename U, void (T::*Setter)(U)>
+int luaU_set(lua_State* L)
+{
+    T* obj = luaW_check<T>(L, 1);
+    if (obj)
+        (obj->*Setter)(luaU_check<U>(L, 2));
+    return 0;
+}
+
+template <typename T, typename U, void (T::*Setter)(const U&)>
 int luaU_set(lua_State* L)
 {
     T* obj = luaW_check<T>(L, 1);
@@ -220,6 +237,22 @@ int luaU_getset(lua_State* L)
 }
 
 template <typename T, typename U, U (T::*Getter)() const, void (T::*Setter)(U)>
+int luaU_getset(lua_State* L)
+{
+    T* obj = luaW_check<T>(L, 1);
+    if (obj && lua_gettop(L) >= 2)
+    {
+        (obj->*Setter)(luaU_check<U>(L, 2));
+        return 0;
+    }
+    else
+    {
+        luaU_push(L, (obj->*Getter)());
+        return 1;
+    }
+}
+
+template <typename T, typename U, const U& (T::*Getter)() const, void (T::*Setter)(const U&)>
 int luaU_getset(lua_State* L)
 {
     T* obj = luaW_check<T>(L, 1);
