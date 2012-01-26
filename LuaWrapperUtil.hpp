@@ -25,8 +25,11 @@
 // These are not actually typesafe past just checking if the value is an int
 //
 
-#define luaU_pushenum(L, i, n, e) \
-    lua_pushnumber((L), (e)); lua_setfield((L), ((i)<0? (i)-1 : (i)), (n));
+#define luaU_pushenum(L, index, key, value)                         \
+    do {                                                            \
+        lua_pushnumber((L), (value));                               \
+        lua_setfield((L), ((index)<0? (index)-1 : (index)), (key)); \
+    } while (0)
 
 template <typename T>
 T luaU_toenum(lua_State* L, int index)
