@@ -97,7 +97,7 @@ template <typename U>
 inline U luaU_getfield(lua_State* L, int index, const char* field)
 {
     lua_getfield(L, index, field);
-    U val = luaU_to<U>(L, index);
+    U val = luaU_to<U>(L, -1);
     lua_pop(L, 1);
     return val;
 }
