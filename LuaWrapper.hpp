@@ -333,15 +333,15 @@ void luaW_clean(lua_State* L, int index)
 template <typename T>
 void luaW_postconstructor(lua_State* L, int numargs)
 {
-    // ... ud
-    lua_getfield(L, -1, LUAW_POSTCTOR_KEY); // ... ud ud.__postctor
+    // ... args ud
+    lua_getfield(L, -1, LUAW_POSTCTOR_KEY); // ... args ud ud.__postctor
     if (lua_type(L, -1) == LUA_TFUNCTION)
     {
-        lua_pushvalue(L, -2); // ... ud ud.__postctor ud
-        lua_insert(L, 1); // ud ... ud ud.__postctor
-        lua_insert(L, 2); // ud ud.__postctor ... ud
-        lua_insert(L, 3); // ud ud.__postctor ud  ...
-        lua_call(L, numargs+1, 0); // ud
+        lua_pushvalue(L, -2); // ... args ud ud.__postctor ud
+        lua_insert(L, -3); // ... ud args ud ud.__postctor
+        lua_insert(L, -3); // ... ud.__postctor ud args ud
+        lua_insert(L, -3); // ... ud ud.__postctor ud args
+        lua_call(L, numargs+1, 0); // ... ud
     }
     else
     {
