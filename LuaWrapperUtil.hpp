@@ -52,7 +52,6 @@ T* luaU_checkornil(lua_State* L, int index, bool strict = false)
         return luaW_check<T>(L, index, strict);
 }
 
-
 ///////////////////////////////////////////////////////////////////////////////
 //
 // A set of templated luaL_check and lua_push functions for use in the getters
@@ -60,20 +59,55 @@ T* luaU_checkornil(lua_State* L, int index, bool strict = false)
 //
 
 template <typename U> U luaU_check(lua_State* L, int index);
-template <> inline bool         luaU_check<>(lua_State* L, int index) { return lua_toboolean(L, index); }
-template <> inline const char*  luaU_check<>(lua_State* L, int index) { return luaL_checkstring(L, index); }
-template <> inline unsigned int luaU_check<>(lua_State* L, int index) { return luaL_checkinteger(L, index); }
-template <> inline int          luaU_check<>(lua_State* L, int index) { return luaL_checkinteger(L, index); }
-template <> inline float        luaU_check<>(lua_State* L, int index) { return luaL_checknumber(L, index); }
-template <> inline double       luaU_check<>(lua_State* L, int index) { return luaL_checknumber(L, index); }
+template <> inline bool          luaU_check<>(lua_State* L, int index) { return lua_toboolean(L, index); }
+template <> inline const char*   luaU_check<>(lua_State* L, int index) { return luaL_checkstring(L, index); }
+template <> inline unsigned int  luaU_check<>(lua_State* L, int index) { return luaL_checkinteger(L, index); }
+template <> inline int           luaU_check<>(lua_State* L, int index) { return luaL_checkinteger(L, index); }
+template <> inline unsigned char luaU_check<>(lua_State* L, int index) { return luaL_checkinteger(L, index); }
+template <> inline char          luaU_check<>(lua_State* L, int index) { return luaL_checkinteger(L, index); }
+template <> inline float         luaU_check<>(lua_State* L, int index) { return luaL_checknumber(L, index); }
+template <> inline double        luaU_check<>(lua_State* L, int index) { return luaL_checknumber(L, index); }
+
+template <typename U> U luaU_to(lua_State* L, int index);
+template <> inline bool          luaU_to<>(lua_State* L, int index) { return lua_toboolean(L, index); }
+template <> inline const char*   luaU_to<>(lua_State* L, int index) { return lua_tostring(L, index); }
+template <> inline unsigned int  luaU_to<>(lua_State* L, int index) { return lua_tointeger(L, index); }
+template <> inline int           luaU_to<>(lua_State* L, int index) { return lua_tointeger(L, index); }
+template <> inline unsigned char luaU_to<>(lua_State* L, int index) { return lua_tointeger(L, index); }
+template <> inline char          luaU_to<>(lua_State* L, int index) { return lua_tointeger(L, index); }
+template <> inline float         luaU_to<>(lua_State* L, int index) { return lua_tonumber(L, index); }
+template <> inline double        luaU_to<>(lua_State* L, int index) { return lua_tonumber(L, index); }
 
 template <typename U> void luaU_push(lua_State* L, const U& val);
-template <> inline void luaU_push<>(lua_State* L, const bool&         val) { lua_pushboolean(L, val); }
-template <> inline void luaU_push<>(lua_State* L, const int&          val) { lua_pushinteger(L, val); }
-template <> inline void luaU_push<>(lua_State* L, const unsigned int& val) { lua_pushinteger(L, val); }
-template <> inline void luaU_push<>(lua_State* L, const char* const&  val) { lua_pushstring(L, val); }
-template <> inline void luaU_push<>(lua_State* L, const float&        val) { lua_pushnumber(L, val); }
-template <> inline void luaU_push<>(lua_State* L, const double&       val) { lua_pushnumber(L, val); }
+template <> inline void luaU_push<>(lua_State* L, const bool&          val) { lua_pushboolean(L, val); }
+template <> inline void luaU_push<>(lua_State* L, const int&           val) { lua_pushinteger(L, val); }
+template <> inline void luaU_push<>(lua_State* L, const unsigned int&  val) { lua_pushinteger(L, val); }
+template <> inline void luaU_push<>(lua_State* L, const char&          val) { lua_pushinteger(L, val); }
+template <> inline void luaU_push<>(lua_State* L, const unsigned char& val) { lua_pushinteger(L, val); }
+template <> inline void luaU_push<>(lua_State* L, const char* const&   val) { lua_pushstring(L, val); }
+template <> inline void luaU_push<>(lua_State* L, const float&         val) { lua_pushnumber(L, val); }
+template <> inline void luaU_push<>(lua_State* L, const double&        val) { lua_pushnumber(L, val); }
+
+///////////////////////////////////////////////////////////////////////////////
+//
+// These are just some functions I've always felt should exist
+//
+
+template <typename U>
+inline U luaU_getfield(lua_State* L, int index, const char* field)
+{
+    lua_getfield(L, index, field);
+    U val = luaU_to<U>(L, index);
+    lua_pop(L, 1);
+    return val;
+}
+
+template <typename U>
+inline void luaU_setfield(lua_State* L, int index, const char* field, U val)
+{
+    luaU_push<U>(L, val);
+    lua_setfield(L, index, field);
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 //
