@@ -361,14 +361,19 @@ void luaW_postconstructor(lua_State* L, int numargs)
 // Creates an object of type T using the constructor and subsequently calls the
 // post-constructor on it.
 template <typename T>
-int luaW_new(lua_State* L)
+inline int luaW_new(lua_State* L, int args)
 {
-    int numargs = lua_gettop(L);
     T* obj = LuaWrapper<T>::allocator(L);
     luaW_push<T>(L, obj);
     luaW_hold<T>(L, obj);
-    luaW_postconstructor<T>(L, numargs);
+    luaW_postconstructor<T>(L, args);
     return 1;
+}
+
+template <typename T>
+int luaW_new(lua_State* L)
+{
+    return luaW_new<T>(L, lua_gettop(L));
 }
 
 #ifdef LUAW_BUILDER
