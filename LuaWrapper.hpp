@@ -130,8 +130,8 @@ luaW_Userdata luaW_cast(const luaW_Userdata& obj)
 template <typename T>
 bool luaW_is(lua_State *L, int index, bool strict = false)
 {
-    bool equal = false;
-    if (lua_touserdata(L, index) && lua_getmetatable(L, index))
+    bool equal = false;// lua_isnil(L, index);
+    if (!equal && lua_isuserdata(L, index) && lua_getmetatable(L, index))
     {
         // ... ud ... udmt
         luaL_getmetatable(L, LuaWrapper<T>::classname); // ... ud ... udmt Tmt
@@ -211,20 +211,27 @@ T* luaW_check(lua_State* L, int index, bool strict = false)
 template <typename T>
 void luaW_push(lua_State* L, T* obj)
 {
-    luaW_Userdata* ud = (luaW_Userdata*)lua_newuserdata(L, sizeof(luaW_Userdata)); // ... obj
-    ud->data = obj;
-    ud->cast = LuaWrapper<T>::cast;
-    luaL_getmetatable(L, LuaWrapper<T>::classname); // ... obj mt
-    lua_setmetatable(L, -2); // ... obj
-    luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... obj LuaWrapper
-    lua_getfield(L, -1, LUAW_COUNT_KEY); // ... obj LuaWrapper LuaWrapper.counts
-    LuaWrapper<T>::identifier(L, obj); // ... obj LuaWrapper LuaWrapper.counts id
-    lua_gettable(L, -2); // ... obj LuaWrapper LuaWrapper.counts count
-    int count = lua_tointeger(L, -1);
-    LuaWrapper<T>::identifier(L, obj); // ... obj LuaWrapper LuaWrapper.counts count id
-    lua_pushinteger(L, count+1); // ... obj LuaWrapper LuaWrapper.counts count id count+1
-    lua_settable(L, -4); // ... obj LuaWrapper LuaWrapper.counts count
-    lua_pop(L, 3); // ... obj
+    if (obj)
+    {
+        luaW_Userdata* ud = (luaW_Userdata*)lua_newuserdata(L, sizeof(luaW_Userdata)); // ... obj
+        ud->data = obj;
+        ud->cast = LuaWrapper<T>::cast;
+        luaL_getmetatable(L, LuaWrapper<T>::classname); // ... obj mt
+        lua_setmetatable(L, -2); // ... obj
+        luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... obj LuaWrapper
+        lua_getfield(L, -1, LUAW_COUNT_KEY); // ... obj LuaWrapper LuaWrapper.counts
+        LuaWrapper<T>::identifier(L, obj); // ... obj LuaWrapper LuaWrapper.counts id
+        lua_gettable(L, -2); // ... obj LuaWrapper LuaWrapper.counts count
+        int count = lua_tointeger(L, -1);
+        LuaWrapper<T>::identifier(L, obj); // ... obj LuaWrapper LuaWrapper.counts count id
+        lua_pushinteger(L, count+1); // ... obj LuaWrapper LuaWrapper.counts count id count+1
+        lua_settable(L, -4); // ... obj LuaWrapper LuaWrapper.counts count
+        lua_pop(L, 3); // ... obj
+    }
+    else
+    {
+        lua_pushnil(L);
+    }
 }
 
 // Instructs LuaWrapper that it owns the userdata, and can manage its memory.

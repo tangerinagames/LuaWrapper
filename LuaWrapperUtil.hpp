@@ -19,17 +19,23 @@
 
 #include "LuaWrapper.hpp"
 
+inline int luaU_correctindex(lua_State* L, int index, int correction)
+{
+    return index < 0 ? index - correction : index;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 // A set if enum helper functions and macros
 // These are not actually typesafe past just checking if the value is an int
 //
 
-#define luaU_pushenum(L, index, key, value)                         \
-    do {                                                            \
-        lua_pushnumber((L), (value));                               \
-        lua_setfield((L), ((index)<0? (index)-1 : (index)), (key)); \
-    } while (0)
+template <typename T>
+void luaU_pushenum(lua_State* L, int index, const char* key, T value)
+{
+    lua_pushnumber(L, value);
+    lua_setfield(L, luaU_correctindex(L, index, 1), key);
+}
 
 template <typename T>
 T luaU_toenum(lua_State* L, int index)
@@ -106,7 +112,7 @@ template <typename U>
 inline void luaU_setfield(lua_State* L, int index, const char* field, U val)
 {
     luaU_push<U>(L, val);
-    lua_setfield(L, index, field);
+    lua_setfield(L, luaU_correctindex(L, index, 1), field);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -139,6 +145,7 @@ inline void luaU_setfield(lua_State* L, int index, const char* field, U val)
 // Getters and setters must have the following signatures:
 //    void T::Setter(U value);
 //    void T::Setter(U* value);
+//    void T::Setter(const U& value);
 //    U Getter() const;
 //    U* Getter() const;
 //
