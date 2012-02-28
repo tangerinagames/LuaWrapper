@@ -296,6 +296,22 @@ int luaU_getset(lua_State* L)
     }
 }
 
+template <typename T, typename U, U (T::*Getter)() const, void (T::*Setter)(const U&)>
+int luaU_getset(lua_State* L)
+{
+    T* obj = luaW_check<T>(L, 1);
+    if (obj && lua_gettop(L) >= 2)
+    {
+        (obj->*Setter)(luaU_check<U>(L, 2));
+        return 0;
+    }
+    else
+    {
+        luaU_push(L, (obj->*Getter)());
+        return 1;
+    }
+}
+
 template <typename T, typename U, const U& (T::*Getter)() const, void (T::*Setter)(const U&)>
 int luaU_getset(lua_State* L)
 {
