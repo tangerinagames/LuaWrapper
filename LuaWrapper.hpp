@@ -55,6 +55,14 @@ extern "C"
 #define LUAW_HOLDS_KEY "__holds"
 #define LUAW_WRAPPER_KEY "LuaWrapper"
 
+// A simple utility function to adjust a given index
+// Useful for when a parameter index needs to be adjusted
+// after pushing or popping things off the stack
+inline int luaW_correctindex(lua_State* L, int index, int correction)
+{
+    return index < 0 ? index - correction : index;
+}
+
 // These are the default allocator and deallocator. If you would prefer an
 // alternative option, you may select a different function when registering
 // your class.
@@ -299,16 +307,25 @@ bool luaW_hold(lua_State* L, T* obj)
 //
 // This function takes the index of the identifier for an object rather than
 // the object itself. This is because needs to be able to run after the object
-// has already been deallocated.
+// has already been deallocated. A wrapper is provided for when it is more
+// convenient to pass in the object directly.
 template <typename T>
 void luaW_release(lua_State* L, int index)
 {
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... id ... LuaWrapper
     lua_getfield(L, -1, LUAW_HOLDS_KEY); // ... id ... LuaWrapper LuaWrapper.holds
-    lua_pushvalue(L, (index>0) ? index : index-2); // ... id ... LuaWrapper LuaWrapper.holds id
+    lua_pushvalue(L, luaW_correctindex(L, index, 2)); // ... id ... LuaWrapper LuaWrapper.holds id
     lua_pushnil(L); // ... id ... LuaWrapper LuaWrapper.holds id nil
     lua_settable(L, -3); // ... id ... LuaWrapper LuaWrapper.holds
     lua_pop(L, 2); // ... id ...
+}
+
+template <typename T>
+void luaW_release(lua_State* L, T* obj)
+{
+    LuaWrapper<T>::identifier(L, obj); // ... id
+    luaW_release<T>(L, -1); // ... id
+    lua_pop(L, 1); // ...
 }
 
 // When luaW_clean is called on an object, values stored on it's Lua store
@@ -316,16 +333,25 @@ void luaW_release(lua_State* L, int index)
 //
 // This function takes the index of the identifier for an object rather than
 // the object itself. This is because needs to be able to run after the object
-// has already been deallocated.
+// has already been deallocated. A wrapper is provided for when it is more
+// convenient to pass in the obejct directly
 template <typename T>
 void luaW_clean(lua_State* L, int index)
 {
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... id ... LuaWrapper
     lua_getfield(L, -1, LUAW_STORAGE_KEY); // ... id ... LuaWrapper LuaWrapper.storage
-    lua_pushvalue(L, (index>0) ? index : index-2); // ... id ... LuaWrapper LuaWrapper.storage id
+    lua_pushvalue(L, luaW_correctindex(L, index, 2)); // ... id ... LuaWrapper LuaWrapper.storage id
     lua_pushnil(L); // ... id ... LuaWrapper LuaWrapper.storage id nil
     lua_settable(L, -3);  // ... id ... LuaWrapper LuaWrapper.store
     lua_pop(L, 2); // ... id ...
+}
+
+template <typename T>
+void luaW_clean(lua_State* L, T* obj)
+{
+    LuaWrapper<T>::identifier(L, obj); // ... id
+    luaW_clean<T>(L, -1); // ... id
+    lua_pop(L, 1); // ...
 }
 
 // This function is called from Lua, not C++
