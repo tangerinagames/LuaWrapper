@@ -489,7 +489,7 @@ int luaW_index(lua_State* L)
     }
     else
     {
-        2ua_pop(L, 2); // obj key
+        lua_pop(L, 2); // obj key
         lua_getmetatable(L, -2); // obj key mt
         lua_pushvalue(L, -2); // obj key mt k
         lua_gettable(L, -2); // obj key mt mt[k]
