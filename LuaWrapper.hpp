@@ -131,6 +131,16 @@ luaW_Userdata luaW_cast(const luaW_Userdata& obj)
     return luaW_Userdata(static_cast<U*>(static_cast<T*>(obj.data)), LuaWrapper<U>::cast);
 }
 
+template <typename T>
+inline void luaW_wrapperfield(lua_State* L, const char* field)
+{
+    luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... LuaWrapper
+    lua_getfield(L, -1, field); // ... LuaWrapper LuaWrapper.field
+    lua_getfield(L, -1, LuaWrapper<T>::classname); // ... LuaWrapper LuaWrapper.field LuaWrapper.field.T
+    lua_insert(L, -3); // ... LuaWrapper.field.T LuaWrapper LuaWrapper.field
+    lua_pop(L, 2); // ... LuaWrapper.field.T
+}
+
 // Analogous to lua_is(boolean|string|*)
 //
 // Returns 1 if the value at the given acceptable index is of type T (or if
@@ -221,20 +231,19 @@ void luaW_push(lua_State* L, T* obj)
 {
     if (obj)
     {
-        luaW_Userdata* ud = (luaW_Userdata*)lua_newuserdata(L, sizeof(luaW_Userdata)); // ... obj
+        luaW_Userdata* ud = static_cast<luaW_Userdata*>(lua_newuserdata(L, sizeof(luaW_Userdata))); // ... obj
         ud->data = obj;
         ud->cast = LuaWrapper<T>::cast;
         luaL_getmetatable(L, LuaWrapper<T>::classname); // ... obj mt
         lua_setmetatable(L, -2); // ... obj
-        luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... obj LuaWrapper
-        lua_getfield(L, -1, LUAW_COUNT_KEY); // ... obj LuaWrapper LuaWrapper.counts
-        LuaWrapper<T>::identifier(L, obj); // ... obj LuaWrapper LuaWrapper.counts id
-        lua_gettable(L, -2); // ... obj LuaWrapper LuaWrapper.counts count
+        luaW_wrapperfield<T>(L, LUAW_COUNT_KEY); // ... obj counts
+        LuaWrapper<T>::identifier(L, obj); // ... obj counts counts id
+        lua_gettable(L, -2); // ... obj counts counts count
         int count = lua_tointeger(L, -1);
-        LuaWrapper<T>::identifier(L, obj); // ... obj LuaWrapper LuaWrapper.counts count id
-        lua_pushinteger(L, count+1); // ... obj LuaWrapper LuaWrapper.counts count id count+1
-        lua_settable(L, -4); // ... obj LuaWrapper LuaWrapper.counts count
-        lua_pop(L, 3); // ... obj
+        LuaWrapper<T>::identifier(L, obj); // ... obj counts count id
+        lua_pushinteger(L, count+1); // ... obj counts count id count+1
+        lua_settable(L, -4); // ... obj counts count
+        lua_pop(L, 2); // ... obj
     }
     else
     {
@@ -251,47 +260,49 @@ void luaW_push(lua_State* L, T* obj)
 template <typename T>
 bool luaW_hold(lua_State* L, T* obj)
 {
-    luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... LuaWrapper
-
-    lua_getfield(L, -1, LUAW_HOLDS_KEY); // ... LuaWrapper LuaWrapper.holds
-    LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.holds id
-    lua_rawget(L, -2); // ... LuaWrapper LuaWrapper.holds hold
+    luaW_wrapperfield<T>(L, LUAW_HOLDS_KEY); // ... holds
+    LuaWrapper<T>::identifier(L, obj); // ... holds id
+    lua_gettable(L, -2); // ... holds hold
     bool held = lua_toboolean(L, -1);
     // If it's not held, hold it
     if (!held)
     {
         // Apply hold boolean
-        lua_pop(L, 1); // ... LuaWrapper LuaWrapper.holds
-        LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.holds id
-        lua_pushboolean(L, true); // ... LuaWrapper LuaWrapper.holds id true
-        lua_rawset(L, -3); // ... LuaWrapper LuaWrapper.holds
+        lua_pop(L, 1); // ... holds
+        LuaWrapper<T>::identifier(L, obj); // ... holds id
+        lua_pushboolean(L, true); // ... holds id true
+        lua_settable(L, -3); // ... holds
 
         // Check count, if there's at least one, add a storage table
-        lua_pop(L, 1); // ... LuaWrapper
-        lua_getfield(L, -1, LUAW_COUNT_KEY); // ... LuaWrapper LuaWrapper.counts
-        LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.counts id
-        lua_rawget(L, -2); // ... LuaWrapper LuaWrapper.counts count
+        lua_pop(L, 1); // ...
+        luaW_wrapperfield<T>(L, LUAW_COUNT_KEY); // ... counts
+        LuaWrapper<T>::identifier(L, obj); // ... counts id
+        lua_rawget(L, -2); // ... counts count
         if (lua_tointeger(L, -1) > 0)
         {
             // Find and attach the storage table
             lua_pop(L, 2);
-            lua_getfield(L, -1, LUAW_STORAGE_KEY); // ... LuaWrapper LuaWrapper.storage
-            LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.storage id
-            lua_rawget(L, -2); // ... LuaWrapper LuaWrapper.storage store
+            luaW_wrapperfield<T>(L, LUAW_STORAGE_KEY); // ... storage
+            LuaWrapper<T>::identifier(L, obj); // ... storage id
+            lua_gettable(L, -2); // ... storage store
 
             // Add the storage table if there isn't one already
             if (lua_isnoneornil(L, -1))
             {
-                lua_pop(L, 1); // ... LuaWrapper LuaWrapper.storage
-                LuaWrapper<T>::identifier(L, obj); // ... LuaWrapper LuaWrapper.storage id
-                lua_newtable(L); // ... LuaWrapper LuaWrapper.storage id store
+                lua_pop(L, 1); // ... storage
+                LuaWrapper<T>::identifier(L, obj); // ... storage id
+                lua_newtable(L); // ... storage id store
 
-                lua_newtable(L); // ... LuaWrapper LuaWrapper.storage id store mt storemt
-                luaL_getmetatable(L, LuaWrapper<T>::classname); // ... LuaWrapper LuaWrapper.storage id store storemt mt
-                lua_setfield(L, -2, "__index"); // ... LuaWrapper LuaWrapper.storage id store storemt
-                lua_setmetatable(L, -2); // ... LuaWrapper LuaWrapper.storage id store
+                lua_newtable(L); // ... storage id store mt storemt
+                luaL_getmetatable(L, LuaWrapper<T>::classname); // ... storage id store storemt mt
+                lua_setfield(L, -2, "__index"); // ... storage id store storemt
+                lua_setmetatable(L, -2); // ... storage id store
 
-                lua_rawset(L, -3); // ... LuaWrapper LuaWrapper.storage
+                lua_rawset(L, -3); // ... storage
+                lua_pop(L, 1); // ...
+            }
+            else
+            {
                 lua_pop(L, 2); // ...
             }
         }
@@ -312,12 +323,11 @@ bool luaW_hold(lua_State* L, T* obj)
 template <typename T>
 void luaW_release(lua_State* L, int index)
 {
-    luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... id ... LuaWrapper
-    lua_getfield(L, -1, LUAW_HOLDS_KEY); // ... id ... LuaWrapper LuaWrapper.holds
-    lua_pushvalue(L, luaW_correctindex(L, index, 2)); // ... id ... LuaWrapper LuaWrapper.holds id
-    lua_pushnil(L); // ... id ... LuaWrapper LuaWrapper.holds id nil
-    lua_settable(L, -3); // ... id ... LuaWrapper LuaWrapper.holds
-    lua_pop(L, 2); // ... id ...
+    luaW_wrapperfield<T>(L, LUAW_HOLDS_KEY); // ... id ... holds
+    lua_pushvalue(L, luaW_correctindex(L, index, 1)); // ... id ... holds id
+    lua_pushnil(L); // ... id ... holds id nil
+    lua_settable(L, -3); // ... id ... holds
+    lua_pop(L, 1); // ... id ...
 }
 
 template <typename T>
@@ -338,12 +348,11 @@ void luaW_release(lua_State* L, T* obj)
 template <typename T>
 void luaW_clean(lua_State* L, int index)
 {
-    luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... id ... LuaWrapper
-    lua_getfield(L, -1, LUAW_STORAGE_KEY); // ... id ... LuaWrapper LuaWrapper.storage
-    lua_pushvalue(L, luaW_correctindex(L, index, 2)); // ... id ... LuaWrapper LuaWrapper.storage id
-    lua_pushnil(L); // ... id ... LuaWrapper LuaWrapper.storage id nil
-    lua_settable(L, -3);  // ... id ... LuaWrapper LuaWrapper.store
-    lua_pop(L, 2); // ... id ...
+    luaW_wrapperfield<T>(L, LUAW_STORAGE_KEY); // ... id ... storage
+    lua_pushvalue(L, luaW_correctindex(L, index, 1)); // ... id ... storage id
+    lua_pushnil(L); // ... id ... storage id nil
+    lua_settable(L, -3);  // ... id ... store
+    lua_pop(L, 1); // ... id ...
 }
 
 template <typename T>
@@ -466,22 +475,21 @@ int luaW_build(lua_State* L)
 // individual userdata can be treated as a table, and can hold thier own
 // values.
 template <typename T>
-int luaW__index(lua_State* L)
+int luaW_index(lua_State* L)
 {
     // obj key
     T* obj = luaW_to<T>(L, 1);
-    luaW_getregistry(L, LUAW_WRAPPER_KEY); // obj key LuaWrapper
-    lua_getfield(L, -1, LUAW_STORAGE_KEY); // obj key LuaWrapper LuaWrapper.storage
-    LuaWrapper<T>::identifier(L, obj); // obj key LuaWrapper LuaWrapper.storage id
-    lua_rawget(L, -2); // obj key LuaWrapper LuaWrapper.storage store
+    luaW_wrapperfield<T>(L, LUAW_STORAGE_KEY); // obj key storage
+    LuaWrapper<T>::identifier(L, obj); // obj key storage id
+    lua_gettable(L, -2); // obj key storage store
     if (!lua_isnoneornil(L, -1))
     {
-        lua_pushvalue(L, -4); // obj key LuaWrapper LuaWrapper.storage store key
-        lua_gettable(L, -2); // obj key LuaWrapper LuaWrapper.storage store store[k]
+        lua_pushvalue(L, -3); // obj key storage store key
+        lua_gettable(L, -2); // obj key storage store store[k]
     }
     else
     {
-        lua_pop(L, 3); // obj key
+        2ua_pop(L, 2); // obj key
         lua_getmetatable(L, -2); // obj key mt
         lua_pushvalue(L, -2); // obj key mt k
         lua_gettable(L, -2); // obj key mt mt[k]
@@ -497,19 +505,18 @@ int luaW__index(lua_State* L)
 // individual userdata can be treated as a table, and can hold thier own
 // values.
 template <typename T>
-int luaW__newindex(lua_State* L)
+int luaW_newindex(lua_State* L)
 {
     // obj key value
     T* obj = luaW_to<T>(L, 1);
-    luaW_getregistry(L, LUAW_WRAPPER_KEY); // obj key value LuaWrapper
-    lua_getfield(L, -1, LUAW_STORAGE_KEY); // obj key value LuaWrapper LuaWrapper.storage
-    LuaWrapper<T>::identifier(L, obj); // obj key value LuaWrapper LuaWrapper.storage id
-    lua_rawget(L, -2); // obj key value LuaWrapper LuaWrapper.storage store
+    luaW_wrapperfield<T>(L, LUAW_STORAGE_KEY); // obj key value storage
+    LuaWrapper<T>::identifier(L, obj); // obj key value storage id
+    lua_gettable(L, -2); // obj key value storage store
     if (!lua_isnoneornil(L, -1))
     {
-        lua_pushvalue(L, -5); // obj key value LuaWrapper LuaWrapper.storage store key
-        lua_pushvalue(L, -5); // obj key value LuaWrapper LuaWrapper.storage store key value
-        lua_rawset(L, -3); // obj key value LuaWrapper LuaWrapper.storage store
+        lua_pushvalue(L, -4); // obj key value storage store key
+        lua_pushvalue(L, -4); // obj key value storage store key value
+        lua_settable(L, -3); // obj key value storage store
     }
     return 0;
 }
@@ -520,25 +527,24 @@ int luaW__newindex(lua_State* L)
 // count is decremented and if this is the final reference to the userdata its
 // environment table is nil'd and pointer deleted with the destructor callback.
 template <typename T>
-int luaW__gc(lua_State* L)
+int luaW_gc(lua_State* L)
 {
     // obj
     T* obj = luaW_to<T>(L, 1);
     LuaWrapper<T>::identifier(L, obj); // obj id
-    luaW_getregistry(L, LUAW_WRAPPER_KEY); // obj id LuaWrapper
-    lua_getfield(L, -1, LUAW_COUNT_KEY); // obj id LuaWrapper LuaWrapper.counts
-    LuaWrapper<T>::identifier(L, obj); // obj id LuaWrapper LuaWrapper.counts id
-    lua_gettable(L, -2); // obj id LuaWrapper LuaWrapper.counts count
+    luaW_wrapperfield<T>(L, LUAW_COUNT_KEY); // obj id counts
+    lua_pushvalue(L, 2); // obj id counts id
+    lua_gettable(L, -2); // obj id counts count
     int count = lua_tointeger(L, -1);
-    lua_pushvalue(L, 2); // obj id LuaWrapper LuaWrapper.counts count id
-    lua_pushinteger(L, --count); // obj id LuaWrapper LuaWrapper.counts count id count-1
-    lua_settable(L, -4); // obj id LuaWrapper LuaWrapper.counts count
+    lua_pushvalue(L, 2); // obj id counts count id
+    lua_pushinteger(L, count-1); // obj id counts count id count-1
+    lua_settable(L, -4); // obj id counts count
 
     if (obj && 0 == count)
     {
-        lua_getfield(L, 3, LUAW_HOLDS_KEY); // obj id LuaWrapper LuaWrapper.counts LuaWrapper.holds
-        lua_pushvalue(L, 2); // obj id LuaWrapper LuaWrapper.counts LuaWrapper.holds id
-        lua_gettable(L, -2); // obj id LuaWrapper LuaWrapper.counts LuaWrapper.holds hold
+        luaW_wrapperfield<T>(L, LUAW_HOLDS_KEY); // obj id counts count holds
+        lua_pushvalue(L, 2); // obj id counts count holds id
+        lua_gettable(L, -2); // obj id counts count holds hold
         if (lua_toboolean(L, -1) && LuaWrapper<T>::deallocator)
         {
             LuaWrapper<T>::deallocator(L, obj);
@@ -585,7 +591,7 @@ void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, c
 #endif
         { NULL, NULL }
     };
-    const luaL_reg defaultmetatable[] = { { "__index", luaW__index<T> }, { "__newindex", luaW__newindex<T> }, { "__gc", luaW__gc<T> }, { NULL, NULL } };
+    const luaL_reg defaultmetatable[] = { { "__index", luaW_index<T> }, { "__newindex", luaW_newindex<T> }, { "__gc", luaW_gc<T> }, { NULL, NULL } };
     const luaL_reg emptytable[] = { { NULL, NULL } };
 
     table = table ? table : emptytable;
@@ -604,9 +610,23 @@ void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, c
         lua_setfield(L, -2, LUAW_STORAGE_KEY); // nil LuaWrapper
         lua_newtable(L); // nil LuaWrapper {}
         lua_setfield(L, -2, LUAW_HOLDS_KEY); // nil LuaWrapper
-        lua_pop(L, 1); // nil
+        lua_insert(L, -2);
+        lua_pop(L, 1); //
     }
-    lua_pop(L, 1); //
+    lua_getfield(L, -1, LUAW_COUNT_KEY); // LuaWrapper count
+    lua_newtable(L); // LuaWrapper storage {}
+    lua_setfield(L, -2, classname); // LuaWrapper count
+    lua_pop(L, 1); // LuaWrapper
+
+    lua_getfield(L, -1, LUAW_STORAGE_KEY); // LuaWrapper storage
+    lua_newtable(L); // LuaWrapper storage {}
+    lua_setfield(L, -2, classname); // LuaWrapper storage
+    lua_pop(L, 1); // LuaWrapper
+
+    lua_getfield(L, -1, LUAW_HOLDS_KEY); // LuaWrapper holds
+    lua_newtable(L); // LuaWrapper storage {}
+    lua_setfield(L, -2, classname); // LuaWrapper holds
+    lua_pop(L, 2); //
 
     // Open table
     if (allocator)
