@@ -221,6 +221,20 @@ int luaU_set(lua_State* L)
     return 0;
 }
 
+template <typename T, typename U, const U* T::*Member, bool release = false>
+int luaU_set(lua_State* L)
+{
+    T* obj = luaW_check<T>(L, 1);
+    if (obj)
+    {
+        U* member = luaU_checkornil<U>(L, 2);
+        obj->*Member = member;
+        if (member && release)
+            luaW_release<U>(L, member);
+    }
+    return 0;
+}
+
 template <typename T, typename U, void (T::*Setter)(U)>
 int luaU_set(lua_State* L)
 {
