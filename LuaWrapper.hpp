@@ -136,9 +136,7 @@ inline void luaW_wrapperfield(lua_State* L, const char* field)
 {
     luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... LuaWrapper
     lua_getfield(L, -1, field); // ... LuaWrapper LuaWrapper.field
-    lua_getfield(L, -1, LuaWrapper<T>::classname); // ... LuaWrapper LuaWrapper.field LuaWrapper.field.T
-    lua_insert(L, -3); // ... LuaWrapper.field.T LuaWrapper LuaWrapper.field
-    lua_pop(L, 2); // ... LuaWrapper.field.T
+    lua_remove(L, -2); // ... LuaWrapper LuaWrapper.field
 }
 
 // Analogous to lua_is(boolean|string|*)
@@ -602,31 +600,17 @@ void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, c
     if (lua_isnil(L, -1))
     {
         lua_newtable(L); // nil {}
-        luaW_setregistry(L, LUAW_WRAPPER_KEY); // nil
-        luaW_getregistry(L, LUAW_WRAPPER_KEY); // nil LuaWrapper
+        lua_pushvalue(L, -1); // nil {} {}
+        luaW_setregistry(L, LUAW_WRAPPER_KEY); // nil LuaWrapper
         lua_newtable(L); // nil LuaWrapper {}
         lua_setfield(L, -2, LUAW_COUNT_KEY); // nil LuaWrapper
-        lua_newtable(L); // nil LuaWrapper {}
+        lua_newtable(L); // LuaWrapper nil {}
         lua_setfield(L, -2, LUAW_STORAGE_KEY); // nil LuaWrapper
-        lua_newtable(L); // nil LuaWrapper {}
+        lua_newtable(L); // LuaWrapper {}
         lua_setfield(L, -2, LUAW_HOLDS_KEY); // nil LuaWrapper
-        lua_insert(L, -2);
-        lua_pop(L, 1); //
+        lua_pop(L, 1); // nil
     }
-    lua_getfield(L, -1, LUAW_COUNT_KEY); // LuaWrapper count
-    lua_newtable(L); // LuaWrapper storage {}
-    lua_setfield(L, -2, classname); // LuaWrapper count
-    lua_pop(L, 1); // LuaWrapper
-
-    lua_getfield(L, -1, LUAW_STORAGE_KEY); // LuaWrapper storage
-    lua_newtable(L); // LuaWrapper storage {}
-    lua_setfield(L, -2, classname); // LuaWrapper storage
-    lua_pop(L, 1); // LuaWrapper
-
-    lua_getfield(L, -1, LUAW_HOLDS_KEY); // LuaWrapper holds
-    lua_newtable(L); // LuaWrapper storage {}
-    lua_setfield(L, -2, classname); // LuaWrapper holds
-    lua_pop(L, 2); //
+    lua_pop(L, 1); //
 
     // Open table
     if (allocator)
