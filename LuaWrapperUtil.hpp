@@ -104,6 +104,15 @@ inline U luaU_getfield(lua_State* L, int index, const char* field)
 }
 
 template <typename U>
+inline U luaU_checkfield(lua_State* L, int index, const char* field)
+{
+    lua_getfield(L, index, field);
+    U val = luaU_check<U>(L, -1);
+    lua_pop(L, 1);
+    return val;
+}
+
+template <typename U>
 inline void luaU_setfield(lua_State* L, int index, const char* field, U val)
 {
     luaU_push<U>(L, val);
