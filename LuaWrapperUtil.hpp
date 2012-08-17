@@ -380,6 +380,36 @@ int luaU_getset(lua_State* L)
 
 ///////////////////////////////////////////////////////////////////////////////
 //
+
+template<int...Ints> struct luaU_IntPack {};
+template<int start, int count, int...tail> struct luaU_MakeIntRangeType { typedef typename luaU_MakeIntRangeType<start,count-1,start+count-1,tail...>::type type; };
+template<int start, int...tail> struct luaU_MakeIntRangeType<start,0,tail...> { typedef luaU_IntPack<tail...> type; };
+template<int start, int count> inline typename luaU_MakeIntRangeType<start,count>::type luaU_makeIntRange() { return typename luaU_MakeIntRangeType<start,count>::type(); }
+template<class MemFunPtrType, MemFunPtrType MemberFunc> struct luaU_FuncWrapper;
+
+template<class T, class ReturnType, class ...Args, ReturnType(T::*MemberFunc)(Args...)>
+struct luaU_FuncWrapper<ReturnType(T::*)(Args...),MemberFunc>
+{
+public:
+    static int call(lua_State* L)
+    {
+        return callImpl(L,luaU_makeIntRange<2,sizeof...(Args)>());
+    }
+
+private:
+    template<int...Indices>
+    static int callImpl(lua_State* L, luaU_IntPack<Indices...>)
+    {
+        luaU_push<ReturnType>(L, (luaW_check<T>(L, 1)->*MemberFunc)( luaU_check<Args>(L, Indices)...));
+        return 1;
+    }
+};
+
+#define luaU_func(...) &luaU_FuncWrapper<decltype(__VA_ARGS__),__VA_ARGS__>::call
+
+
+///////////////////////////////////////////////////////////////////////////////
+//
 // Calls the copy constructor for an object of type T.
 // Arguments may be passed in, in case they're needed for the postconstructor
 //
