@@ -48,6 +48,27 @@ extern "C"
 #define luaW_setregistry(L, s) \
      lua_setfield(L, LUA_REGISTRYINDEX, s)
 
+#if LUA_VERSION_NUM == 502
+#define luaL_reg luaL_Reg
+inline int luaL_register(lua_State* L, const char* name, const luaL_Reg table[])
+{
+    if (name)
+    {
+        luaL_newlibtable(L, table);
+        lua_pushvalue(L, -1);
+        lua_setglobal(L, name);
+    }
+    luaL_setfuncs(L, table, 0);
+    return 1;
+}
+
+inline int luaL_typerror(lua_State* L, int narg, const char* tname)
+{
+    const char *msg = lua_pushfstring((L), "%s expected, got %s", (tname), luaL_typename((L), (narg)));
+    return luaL_argerror((L), (narg), msg);
+}
+#endif
+
 #define LUAW_POSTCTOR_KEY "__postctor"
 #define LUAW_EXTENDS_KEY "__extends"
 #define LUAW_STORAGE_KEY "__storage"
@@ -675,6 +696,10 @@ void luaW_extend(lua_State* L)
 
 #undef luaW_getregistry
 #undef luaW_setregistry
+
+#if LUA_VERSION_NUM == 502
+#undef luaL_reg
+#endif
 
 /*
  * Copyright (c) 2010-2011 Alexander Ames
