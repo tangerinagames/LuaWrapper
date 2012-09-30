@@ -58,6 +58,10 @@ T* luaU_checkornil(lua_State* L, int index, bool strict = false)
 // A set of templated luaL_check and lua_push functions for use in the getters
 // and setters below
 //
+// It is often useful to override luaU_check, luaU_to and/or luaU_push to
+// operate on your own simple types rather than register your type with
+// LuaWrapper, especially with small objects.
+//
 
 template <typename U> U luaU_check(lua_State* L, int index);
 template <> inline bool          luaU_check<>(lua_State* L, int index) { return lua_toboolean(L, index); }
@@ -144,6 +148,7 @@ inline void luaU_setfield(lua_State* L, int index, const char* field, U val)
 //     { "GetBar", luaU_get<Foo, bool, &Widget::GetBar> },
 //     { "SetBar", luaU_set<Foo, bool, &Widget::SetBar> },
 //     { "Bar", luaU_getset<Foo, bool, &Widget::GetBar, &Widget::SetBar> },
+//     { NULL, NULL }
 // }
 //
 // Getters and setters must have the following signatures:
@@ -380,15 +385,44 @@ int luaU_getset(lua_State* L)
 
 ///////////////////////////////////////////////////////////////////////////////
 //
+// luaU_func is a special macro that expands into a simple function wrapper.
+// Unlike the getter setters above, you merely need to name the function you
+// would like to wrap. 
+//
+// For example, 
+//
+// struct Foo
+// {
+//     int DoSomething(int, const char*);
+// };
+//
+// static luaL_reg Foo_Metatable[] =
+// {
+//     { "DoSomething", luaU_func(&Foo::DoSomething) },
+//     { NULL, NULL }
+// }
+//
+// This macro will expand based on the function signature of Foo::DoSomething
+// In this example, it would expand into the following wrapper:
+//
+//     luaU_push(luaW_check<T>(L, 1)->DoSomething(luaU_check<int>(L, 2), luaU_check<const char*>(L, 3)));
+//     return 1;
+//
+// This macro and it's underlying templates are somewhat experimental and some
+// refinements are probably needed.  There are cases where it does not
+// currently work and I expect some changes can be made to refine its behavior.
+//
 
-template<int...Ints> struct luaU_IntPack {};
-template<int start, int count, int...tail> struct luaU_MakeIntRangeType { typedef typename luaU_MakeIntRangeType<start,count-1,start+count-1,tail...>::type type; };
-template<int start, int...tail> struct luaU_MakeIntRangeType<start,0,tail...> { typedef luaU_IntPack<tail...> type; };
-template<int start, int count> inline typename luaU_MakeIntRangeType<start,count>::type luaU_makeIntRange() { return typename luaU_MakeIntRangeType<start,count>::type(); }
+#define luaU_func(...) &luaU_FuncWrapper<decltype(__VA_ARGS__),__VA_ARGS__>::call
+
+template<int... ints> struct luaU_IntPack {};
+template<int start, int count, int... tail> struct luaU_MakeIntRangeType { typedef typename luaU_MakeIntRangeType<start, count-1, start+count-1, tail...>::type type; };
+template<int start, int... tail> struct luaU_MakeIntRangeType<start, 0, tail...> { typedef luaU_IntPack<tail...> type; };
+template<int start, int count> inline typename luaU_MakeIntRangeType<start, count>::type luaU_makeIntRange() { return typename luaU_MakeIntRangeType<start, count>::type(); }
 template<class MemFunPtrType, MemFunPtrType MemberFunc> struct luaU_FuncWrapper;
 
-template<class T, class ReturnType, class ...Args, ReturnType(T::*MemberFunc)(Args...)>
-struct luaU_FuncWrapper<ReturnType(T::*)(Args...),MemberFunc>
+template<class T, class ReturnType, class... Args, ReturnType(T::*MemberFunc)(Args...)>
+struct luaU_FuncWrapper<ReturnType(T::*)(Args...), MemberFunc>
 {
 public:
     static int call(lua_State* L)
@@ -397,16 +431,13 @@ public:
     }
 
 private:
-    template<int...Indices>
-    static int callImpl(lua_State* L, luaU_IntPack<Indices...>)
+    template<int... indices>
+    static int callImpl(lua_State* L, luaU_IntPack<indices...>)
     {
-        luaU_push<ReturnType>(L, (luaW_check<T>(L, 1)->*MemberFunc)( luaU_check<Args>(L, Indices)...));
+        luaU_push<ReturnType>(L, (luaW_check<T>(L, 1)->*MemberFunc)(luaU_check<Args>(L, indices)...));
         return 1;
     }
 };
-
-#define luaU_func(...) &luaU_FuncWrapper<decltype(__VA_ARGS__),__VA_ARGS__>::call
-
 
 ///////////////////////////////////////////////////////////////////////////////
 //
