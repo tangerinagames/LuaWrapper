@@ -243,8 +243,8 @@ T* luaW_check(lua_State* L, int index, bool strict = false)
 // Analogous to lua_push(boolean|string|*)
 //
 // Pushes a userdata of type T onto the stack. If this object already exists in
-// the Lua environment, it will assign the existing store to it. Otherwise, a
-// new storage table will be created for it.
+// the Lua environment, it will assign the existing storage table to it.
+// Otherwise, a new storage table will be created for it.
 template <typename T>
 void luaW_push(lua_State* L, T* obj)
 {
@@ -255,14 +255,32 @@ void luaW_push(lua_State* L, T* obj)
         ud->cast = LuaWrapper<T>::cast;
         luaL_getmetatable(L, LuaWrapper<T>::classname); // ... obj mt
         lua_setmetatable(L, -2); // ... obj
-        luaW_wrapperfield<T>(L, LUAW_COUNT_KEY); // ... obj counts
-        LuaWrapper<T>::identifier(L, obj); // ... obj counts counts id
-        lua_gettable(L, -2); // ... obj counts counts count
+        LuaWrapper<T>::identifier(L, obj); // ... obj id
+        luaW_wrapperfield<T>(L, LUAW_COUNT_KEY); // ... obj id counts
+        lua_pushvalue(L, -2); // obj id counts id
+        lua_gettable(L, -2); // ... obj id counts count
         int count = lua_tointeger(L, -1);
-        LuaWrapper<T>::identifier(L, obj); // ... obj counts count id
-        lua_pushinteger(L, count+1); // ... obj counts count id count+1
-        lua_settable(L, -4); // ... obj counts count
-        lua_pop(L, 2); // ... obj
+        lua_pushvalue(L, -3); // ... obj id counts count id
+        lua_pushinteger(L, count+1); // ... obj id counts count id count+1
+        lua_settable(L, -4); // ... obj id counts count
+
+        // Find and attach the storage table
+        luaW_wrapperfield<T>(L, LUAW_STORAGE_KEY); // ... obj id counts count storage
+        lua_pushvalue(L, -4); // ... obj id counts count storage id
+        lua_gettable(L, -2); // ... obj id counts count storage store
+
+        // Add the storage table if there isn't one already
+        if (lua_isnoneornil(L, -1))
+        {
+            lua_pushvalue(L, -5); // ... obj id counts count storage nil id
+            lua_newtable(L); // ... obj id counts count storage nil id store
+            lua_newtable(L); // ... obj id counts count storage nil id store storemt
+            luaL_getmetatable(L, LuaWrapper<T>::classname); //  ... obj id counts count storage nil id store storemt mt
+            lua_setfield(L, -2, "__index"); // ... obj id counts count storage nil id store storemt
+            lua_setmetatable(L, -2); // ... obj id counts count storage nil id store
+            lua_rawset(L, -4); // ... obj id counts count storage nil
+        }
+        lua_pop(L, 5); // ...
     }
     else
     {
@@ -281,50 +299,16 @@ bool luaW_hold(lua_State* L, T* obj)
 {
     luaW_wrapperfield<T>(L, LUAW_HOLDS_KEY); // ... holds
     LuaWrapper<T>::identifier(L, obj); // ... holds id
-    lua_gettable(L, -2); // ... holds hold
-    bool held = lua_toboolean(L, -1);
+    lua_pushvalue(L, -1); // ... holds id
+    lua_gettable(L, -3); // ... holds id hold
     // If it's not held, hold it
-    if (!held)
+    if (!lua_toboolean(L, -1))
     {
         // Apply hold boolean
-        lua_pop(L, 1); // ... holds
-        LuaWrapper<T>::identifier(L, obj); // ... holds id
+        lua_pop(L, 1); // ... holds id
         lua_pushboolean(L, true); // ... holds id true
         lua_settable(L, -3); // ... holds
-
-        // Check count, if there's at least one, add a storage table
         lua_pop(L, 1); // ...
-        luaW_wrapperfield<T>(L, LUAW_COUNT_KEY); // ... counts
-        LuaWrapper<T>::identifier(L, obj); // ... counts id
-        lua_rawget(L, -2); // ... counts count
-        if (lua_tointeger(L, -1) > 0)
-        {
-            // Find and attach the storage table
-            lua_pop(L, 2);
-            luaW_wrapperfield<T>(L, LUAW_STORAGE_KEY); // ... storage
-            LuaWrapper<T>::identifier(L, obj); // ... storage id
-            lua_gettable(L, -2); // ... storage store
-
-            // Add the storage table if there isn't one already
-            if (lua_isnoneornil(L, -1))
-            {
-                lua_pop(L, 1); // ... storage
-                LuaWrapper<T>::identifier(L, obj); // ... storage id
-                lua_newtable(L); // ... storage id store
-
-                lua_newtable(L); // ... storage id store mt storemt
-                luaL_getmetatable(L, LuaWrapper<T>::classname); // ... storage id store storemt mt
-                lua_setfield(L, -2, "__index"); // ... storage id store storemt
-                lua_setmetatable(L, -2); // ... storage id store
-
-                lua_rawset(L, -3); // ... storage
-                lua_pop(L, 1); // ...
-            }
-            else
-            {
-                lua_pop(L, 2); // ...
-            }
-        }
         return true;
     }
     lua_pop(L, 3); // ...
@@ -363,7 +347,7 @@ void luaW_release(lua_State* L, T* obj)
 // This function takes the index of the identifier for an object rather than
 // the object itself. This is because needs to be able to run after the object
 // has already been deallocated. A wrapper is provided for when it is more
-// convenient to pass in the obejct directly
+// convenient to pass in the object directly
 template <typename T>
 void luaW_clean(lua_State* L, int index)
 {
