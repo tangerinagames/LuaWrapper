@@ -538,9 +538,9 @@ int luaW_gc(lua_State* L)
     luaW_wrapperfield<T>(L, LUAW_COUNT_KEY); // obj id counts
     lua_pushvalue(L, 2); // obj id counts id
     lua_gettable(L, -2); // obj id counts count
-    int count = lua_tointeger(L, -1);
+    int count = lua_tointeger(L, -1) - 1;
     lua_pushvalue(L, 2); // obj id counts count id
-    lua_pushinteger(L, count-1); // obj id counts count id count-1
+    lua_pushinteger(L, count); // obj id counts count id count-1
     lua_settable(L, -4); // obj id counts count
 
     if (obj && 0 == count)
