@@ -378,15 +378,15 @@ void luaW_clean(lua_State* L, T* obj)
 template <typename T>
 void luaW_postconstructor(lua_State* L, int numargs)
 {
-    // ... args ud
-    lua_getfield(L, -1, LUAW_POSTCTOR_KEY); // ... args ud ud.__postctor
+    // ... args... ud
+    lua_getfield(L, -1, LUAW_POSTCTOR_KEY); // ... args... ud ud.__postctor
     if (lua_type(L, -1) == LUA_TFUNCTION)
     {
-        lua_pushvalue(L, -2); // ... args ud ud.__postctor ud
-        lua_insert(L, -3); // ... ud args ud ud.__postctor
-        lua_insert(L, -3); // ... ud.__postctor ud args ud
-        lua_insert(L, -3); // ... ud ud.__postctor ud args
-        lua_call(L, numargs+1, 0); // ... ud
+        lua_pushvalue(L, -2); // ... args... ud ud.__postctor ud
+        lua_insert(L, -3 - numargs); // ... ud args... ud ud.__postctor
+        lua_insert(L, -3 - numargs); // ... ud.__postctor ud args... ud
+        lua_insert(L, -3 - numargs); // ... ud ud.__postctor ud args...
+        lua_call(L, numargs + 1, 0); // ... ud
     }
     else
     {
@@ -578,6 +578,8 @@ int luaW_gc(lua_State* L)
 // but still represent the same object. For cases like that, you may specify an
 // identifier function which is responsible for pushing a key representing your
 // object on to the stack.
+// 
+// As with luaL_register, this leaves the new table on the top of the stack.
 template <typename T>
 void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, T* (*allocator)(lua_State*) = luaW_defaultallocator<T>, void (*deallocator)(lua_State*, T*) = luaW_defaultdeallocator<T>, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
 {
