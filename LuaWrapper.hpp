@@ -42,14 +42,10 @@ extern "C"
 
 #define LUAW_BUILDER
 
-#define luaW_getregistry(L, s) \
-     lua_getfield(L, LUA_REGISTRYINDEX, s)
-
-#define luaW_setregistry(L, s) \
-     lua_setfield(L, LUA_REGISTRYINDEX, s)
-
 #if LUA_VERSION_NUM == 502
+
 #define luaL_reg luaL_Reg
+
 inline int luaL_register(lua_State* L, const char* name, const luaL_Reg table[])
 {
     if (name)
@@ -67,6 +63,7 @@ inline int luaL_typerror(lua_State* L, int narg, const char* tname)
     const char *msg = lua_pushfstring((L), "%s expected, got %s", (tname), luaL_typename((L), (narg)));
     return luaL_argerror((L), (narg), msg);
 }
+
 #endif
 
 #define LUAW_POSTCTOR_KEY "__postctor"
@@ -155,7 +152,7 @@ luaW_Userdata luaW_cast(const luaW_Userdata& obj)
 template <typename T>
 inline void luaW_wrapperfield(lua_State* L, const char* field)
 {
-    luaW_getregistry(L, LUAW_WRAPPER_KEY); // ... LuaWrapper
+    lua_getfield(L, LUA_REGISTRYINDEX, LUAW_WRAPPER_KEY); // ... LuaWrapper
     lua_getfield(L, -1, field); // ... LuaWrapper LuaWrapper.field
     lua_remove(L, -2); // ... LuaWrapper LuaWrapper.field
 }
@@ -578,7 +575,7 @@ int luaW_gc(lua_State* L)
 // but still represent the same object. For cases like that, you may specify an
 // identifier function which is responsible for pushing a key representing your
 // object on to the stack.
-// 
+//
 // As with luaL_register, this leaves the new table on the top of the stack.
 template <typename T>
 void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, const luaL_reg* metatable, T* (*allocator)(lua_State*) = luaW_defaultallocator<T>, void (*deallocator)(lua_State*, T*) = luaW_defaultdeallocator<T>, void (*identifier)(lua_State*, T*) = luaW_defaultidentifier<T>)
@@ -603,12 +600,12 @@ void luaW_register(lua_State* L, const char* classname, const luaL_reg* table, c
     metatable = metatable ? metatable : emptytable;
 
     // Ensure that the LuaWrapper table is set up
-    luaW_getregistry(L, LUAW_WRAPPER_KEY); // LuaWrapper
+    lua_getfield(L, LUA_REGISTRYINDEX, LUAW_WRAPPER_KEY); // LuaWrapper
     if (lua_isnil(L, -1))
     {
         lua_newtable(L); // nil {}
         lua_pushvalue(L, -1); // nil {} {}
-        luaW_setregistry(L, LUAW_WRAPPER_KEY); // nil LuaWrapper
+        lua_setfield(L, LUA_REGISTRYINDEX, LUAW_WRAPPER_KEY);
         lua_newtable(L); // nil LuaWrapper {}
         lua_setfield(L, -2, LUAW_COUNT_KEY); // nil LuaWrapper
         lua_newtable(L); // LuaWrapper nil {}
@@ -679,9 +676,6 @@ void luaW_extend(lua_State* L)
 
     lua_pop(L, 4); // mt emt
 }
-
-#undef luaW_getregistry
-#undef luaW_setregistry
 
 #if LUA_VERSION_NUM == 502
 #undef luaL_reg
