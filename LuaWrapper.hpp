@@ -316,31 +316,6 @@ void luaW_release(lua_State* L, T* obj)
     lua_pop(L, 1); // ...
 }
 
-// When luaW_clean is called on an object, values stored on it's Lua store
-// become no longer accessible.
-//
-// This function takes the index of the identifier for an object rather than
-// the object itself. This is because needs to be able to run after the object
-// has already been deallocated. A wrapper is provided for when it is more
-// convenient to pass in the object directly
-template <typename T>
-void luaW_clean(lua_State* L, int index)
-{
-    luaW_wrapperfield<T>(L, LUAW_STORAGE_KEY); // ... id ... storage
-    lua_pushvalue(L, luaW_correctindex(L, index, 1)); // ... id ... storage id
-    lua_pushnil(L); // ... id ... storage id nil
-    lua_settable(L, -3);  // ... id ... store
-    lua_pop(L, 1); // ... id ...
-}
-
-template <typename T>
-void luaW_clean(lua_State* L, T* obj)
-{
-    LuaWrapper<T>::identifier(L, obj); // ... id
-    luaW_clean<T>(L, -1); // ... id
-    lua_pop(L, 1); // ...
-}
-
 // This function is called from Lua, not C++
 //
 // Calls the lua post-constructor (LUAW_POSTCTOR_KEY or "__postctor") on a
@@ -527,8 +502,13 @@ int luaW_gc(lua_State* L)
         {
             LuaWrapper<T>::deallocator(L, obj);
         }
+
+        luaW_wrapperfield<T>(L, LUAW_STORAGE_KEY); // obj id counts count holds hold storage
+        lua_pushvalue(L, 2); // obj id counts count holds hold storage id
+        lua_pushnil(L); // obj id counts count holds hold storage id nil
+        lua_settable(L, -3); // obj id counts count holds hold storage
+
         luaW_release<T>(L, 2);
-        luaW_clean<T>(L, 2);
     }
     return 0;
 }
