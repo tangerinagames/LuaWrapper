@@ -23,7 +23,6 @@
 //  luaW_extend<T, U>
 //  luaW_hold<T>
 //  luaW_release<T>
-//  luaW_clean<T>
 //
 // These functions allow you to manipulate arbitrary classes just like you
 // would the primitive types (e.g. numbers or strings). If you are familiar
@@ -46,7 +45,7 @@ extern "C"
 #define LUAW_POSTCTOR_KEY "__postctor"
 #define LUAW_EXTENDS_KEY "__extends"
 #define LUAW_STORAGE_KEY "__storage"
-#define LUAW_COUNT_KEY "__counts"
+#define LUAW_CACHE_KEY "__cache"
 #define LUAW_HOLDS_KEY "__holds"
 #define LUAW_WRAPPER_KEY "LuaWrapper"
 
@@ -225,37 +224,48 @@ void luaW_push(lua_State* L, T* obj)
 {
     if (obj)
     {
-        luaW_Userdata* ud = static_cast<luaW_Userdata*>(lua_newuserdata(L, sizeof(luaW_Userdata))); // ... obj
-        ud->data = obj;
-        ud->cast = LuaWrapper<T>::cast;
-        luaL_getmetatable(L, LuaWrapper<T>::classname); // ... obj mt
-        lua_setmetatable(L, -2); // ... obj
-        LuaWrapper<T>::identifier(L, obj); // ... obj id
-        luaW_wrapperfield<T>(L, LUAW_COUNT_KEY); // ... obj id counts
-        lua_pushvalue(L, -2); // obj id counts id
-        lua_gettable(L, -2); // ... obj id counts count
-        int count = lua_tointeger(L, -1);
-        lua_pushvalue(L, -3); // ... obj id counts count id
-        lua_pushinteger(L, count+1); // ... obj id counts count id count+1
-        lua_settable(L, -4); // ... obj id counts count
-
-        // Find and attach the storage table
-        luaW_wrapperfield<T>(L, LUAW_STORAGE_KEY); // ... obj id counts count storage
-        lua_pushvalue(L, -4); // ... obj id counts count storage id
-        lua_gettable(L, -2); // ... obj id counts count storage store
-
-        // Add the storage table if there isn't one already
-        if (lua_isnoneornil(L, -1))
+        LuaWrapper<T>::identifier(L, obj); // ... id
+        luaW_wrapperfield<T>(L, LUAW_CACHE_KEY); // ... id cache
+        lua_pushvalue(L, -2); // ... id cache id
+        lua_gettable(L, -2); // ... id cache obj
+        if (lua_isnil(L, -1))
         {
-            lua_pushvalue(L, -5); // ... obj id counts count storage nil id
-            lua_newtable(L); // ... obj id counts count storage nil id store
-            lua_newtable(L); // ... obj id counts count storage nil id store storemt
-            luaL_getmetatable(L, LuaWrapper<T>::classname); //  ... obj id counts count storage nil id store storemt mt
-            lua_setfield(L, -2, "__index"); // ... obj id counts count storage nil id store storemt
-            lua_setmetatable(L, -2); // ... obj id counts count storage nil id store
-            lua_rawset(L, -4); // ... obj id counts count storage nil
+            // Create the new luaW_userdata and place it in the cache
+            lua_pop(L, 1); // ... id cache
+            lua_pushvalue(L, -2); // ... id cache id
+            luaW_Userdata* ud = static_cast<luaW_Userdata*>(lua_newuserdata(L, sizeof(luaW_Userdata))); // ... id cache id obj
+            ud->data = obj;
+            ud->cast = LuaWrapper<T>::cast;
+            lua_pushvalue(L, -1); // ... id cache id obj obj
+            lua_insert(L, -5); // ... obj id cache id obj
+            lua_settable(L, -3); // ... obj id cache
+
+            luaL_getmetatable(L, LuaWrapper<T>::classname); // ... obj id cache mt
+            lua_setmetatable(L, -4); // ... obj id cache
+
+            // Find and attach the storage table
+            luaW_wrapperfield<T>(L, LUAW_STORAGE_KEY); // ... obj id cache storage
+            lua_pushvalue(L, -3); // ... obj id cache storage id
+            lua_gettable(L, -2); // ... obj id cache storage store
+
+            // Add the storage table if there isn't one already
+            if (lua_isnil(L, -1))
+            {
+                lua_pushvalue(L, -4); // ... obj id cache storage nil id
+                lua_newtable(L); // ... obj id cache storage nil id store
+                lua_newtable(L); // ... obj id cache storage nil id store storemt
+                luaL_getmetatable(L, LuaWrapper<T>::classname); //  ... obj id cache storage nil id store storemt mt
+                lua_setfield(L, -2, "__index"); // ... obj id cache storage nil id store storemt
+                lua_setmetatable(L, -2); // ... obj id cache storage nil id store
+                lua_rawset(L, -4); // ... obj id cache storage nil
+            }
+            lua_pop(L, 4); // ... obj
         }
-        lua_pop(L, 5); // ...
+        else
+        {
+            lua_replace(L, -3); // ... obj cache
+            lua_pop(L, 1); // ... obj
+        }
     }
     else
     {
@@ -484,32 +494,21 @@ int luaW_gc(lua_State* L)
 {
     // obj
     T* obj = luaW_to<T>(L, 1);
-    LuaWrapper<T>::identifier(L, obj); // obj id
-    luaW_wrapperfield<T>(L, LUAW_COUNT_KEY); // obj id counts
-    lua_pushvalue(L, 2); // obj id counts id
-    lua_gettable(L, -2); // obj id counts count
-    int count = lua_tointeger(L, -1) - 1;
-    lua_pushvalue(L, 2); // obj id counts count id
-    lua_pushinteger(L, count); // obj id counts count id count-1
-    lua_settable(L, -4); // obj id counts count
-
-    if (obj && 0 == count)
+    LuaWrapper<T>::identifier(L, obj); // obj key value storage id
+    luaW_wrapperfield<T>(L, LUAW_HOLDS_KEY); // obj id counts count holds
+    lua_pushvalue(L, 2); // obj id counts count holds id
+    lua_gettable(L, -2); // obj id counts count holds hold
+    if (lua_toboolean(L, -1) && LuaWrapper<T>::deallocator)
     {
-        luaW_wrapperfield<T>(L, LUAW_HOLDS_KEY); // obj id counts count holds
-        lua_pushvalue(L, 2); // obj id counts count holds id
-        lua_gettable(L, -2); // obj id counts count holds hold
-        if (lua_toboolean(L, -1) && LuaWrapper<T>::deallocator)
-        {
-            LuaWrapper<T>::deallocator(L, obj);
-        }
-
-        luaW_wrapperfield<T>(L, LUAW_STORAGE_KEY); // obj id counts count holds hold storage
-        lua_pushvalue(L, 2); // obj id counts count holds hold storage id
-        lua_pushnil(L); // obj id counts count holds hold storage id nil
-        lua_settable(L, -3); // obj id counts count holds hold storage
-
-        luaW_release<T>(L, 2);
+        LuaWrapper<T>::deallocator(L, obj);
     }
+
+    luaW_wrapperfield<T>(L, LUAW_STORAGE_KEY); // obj id counts count holds hold storage
+    lua_pushvalue(L, 2); // obj id counts count holds hold storage id
+    lua_pushnil(L); // obj id counts count holds hold storage id nil
+    lua_settable(L, -3); // obj id counts count holds hold storage
+
+    luaW_release<T>(L, 2);
     return 0;
 }
 
@@ -545,12 +544,24 @@ inline void luaW_initialize(lua_State* L)
         lua_newtable(L); // ... nil {}
         lua_pushvalue(L, -1); // ... nil {} {}
         lua_setfield(L, LUA_REGISTRYINDEX, LUAW_WRAPPER_KEY); // ... nil LuaWrapper
-        lua_newtable(L); // ... nil LuaWrapper {}
-        lua_setfield(L, -2, LUAW_COUNT_KEY); // ... nil LuaWrapper
+        
+        // Create a storage table        
         lua_newtable(L); // ... LuaWrapper nil {}
         lua_setfield(L, -2, LUAW_STORAGE_KEY); // ... nil LuaWrapper
+        
+        // Create a holds table
         lua_newtable(L); // ... LuaWrapper {}
         lua_setfield(L, -2, LUAW_HOLDS_KEY); // ... nil LuaWrapper
+
+        // Create a cache table, with weak values so that the userdata will not
+        // be ref counted
+        lua_newtable(L); // ... nil LuaWrapper {}
+        lua_newtable(L); // ... nil LuaWrapper {} {}
+        lua_pushstring(L, "v"); // ... nil LuaWrapper {} {} "v"
+        lua_setfield(L, -2, "__mode"); // ... nil LuaWrapper {} {}
+        lua_setmetatable(L, -2); // ... nil LuaWrapper {}
+        lua_setfield(L, -2, LUAW_CACHE_KEY); // ... nil LuaWrapper
+
         lua_pop(L, 1); // ... nil
     }
     lua_pop(L, 1); // ...

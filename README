@@ -74,10 +74,10 @@ Objects created from within Lua scripts (or that are created through luaW_new or
 luaW_build) are considered to be owned by Lua. Ownership merely means that
 when all references to it are removed, the garbage collector will delete the
 object. An object created in C++ and pushed to Lua is not considered owned
-unless luaW_hold is run on it. LuaWrapper maintains its own reference counting
-in order to prevent the __gc metamethod from deleting pointers to objects that
-are still in use. If an object is created in Lua and you do not want it to
-be owned by Lua, you may call luaW_release on it.
+unless luaW_hold is run on it. LuaWrapper uses a weak table to cache objects in
+order to prevent the __gc metamethod from deleting pointers to objects that are 
+still in use. If an object is created in Lua and you do not want it to be owned 
+by Lua, you may call luaW_release on it.
 
 Lua Wrapper Utilities:
 
@@ -87,3 +87,8 @@ main features are some functions which automatically cast interger types
 to enum types and templated getters and setters for primitives an pointers
 to objects. All functions in LuaWrapperUtil.hpp are prefixed with luaU_.
 Documentation and some examples are provided in the comments of the file.
+
+Contributions:
+
+Thanks to Christopher Eykamp for the idea to use ephemeron tables to cache
+userdata to avoid unnecessary allocations as wells as various other feedback. 
