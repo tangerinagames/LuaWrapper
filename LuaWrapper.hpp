@@ -34,11 +34,8 @@
 #ifndef LUA_WRAPPER_H_
 #define LUA_WRAPPER_H_
 
-extern "C"
-{
 #include "lua.h"
 #include "lauxlib.h"
-}
 
 #define LUAW_BUILDER
 
