@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2011 Alexander Ames
+ * Copyright (c) 2010-2013 Alexander Ames
  * Alexander.Ames@gmail.com
  * See Copyright Notice at the end of this file
  */

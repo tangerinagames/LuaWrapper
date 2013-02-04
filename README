@@ -1,5 +1,5 @@
 LuaWrapper
-Copyright (c) 2010-2011 Alexander Ames
+Copyright (c) 2010-2013 Alexander Ames
 Alexander.Ames@gmail.com
 
 LuaWrapper is a library designed to help bridge the gab between Lua and C++.
