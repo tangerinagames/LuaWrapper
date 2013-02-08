@@ -47,9 +47,6 @@ extern "C"
 }
 #endif // LUAW_NO_EXTERN_C
 
-
-#define LUAW_BUILDER
-
 #define LUAW_POSTCTOR_KEY "__postctor"
 #define LUAW_EXTENDS_KEY "__extends"
 #define LUAW_STORAGE_KEY "__storage"
@@ -382,62 +379,6 @@ int luaW_new(lua_State* L)
     return luaW_new<T>(L, lua_gettop(L));
 }
 
-#ifdef LUAW_BUILDER
-
-// This function is called from Lua, not C++
-//
-// This is an alternative way to construct objects. Instead of using new and a
-// constructor, you can use a builder instead. A builder is called like this:
-//
-// f = Foo.build
-// {
-//     X = 10;
-//     Y = 20;
-// }
-//
-// This will then create a new Foo object, and then call f:X(10) and f:Y(20)
-// on that object. The lua defined constructor is not called at any point. The
-// keys in this table are used as function names on the metatable.
-//
-// This is sort of experimental, just to see if it ends up being useful.
-template <typename T>
-void luaW_builder(lua_State* L)
-{
-    if (lua_type(L, 1) == LUA_TTABLE)
-    {
-        // {} ud
-        for (lua_pushnil(L); lua_next(L, 1); lua_pop(L, 1))
-        {
-            // {} ud k v
-            lua_pushvalue(L, -2); // {} ud k v k
-            lua_gettable(L, -4); // {} ud k v ud[k]
-            lua_pushvalue(L, -4); // {} ud k v ud[k] ud
-            lua_pushvalue(L, -3); // {} ud k v ud[k] ud v
-            lua_call(L, 2, 0); // {} ud k v
-        }
-        // {} ud
-    }
-}
-
-// This function is generally called from Lua, not C++
-//
-// Creates an object of type T and initializes it using its builder to
-// initialize it. Calls post constructor with 0 arguments in case special
-// initialization is needed to set up special tables that can not be added
-// during construction
-template <typename T>
-int luaW_build(lua_State* L)
-{
-    T* obj = LuaWrapper<T>::allocator(L);
-    luaW_push<T>(L, obj);
-    luaW_hold<T>(L, obj);
-    luaW_postconstructor<T>(L, 0);
-    luaW_builder<T>(L);
-    return 1;
-}
-
-#endif
-
 // This function is called from Lua, not C++
 //
 // The default metamethod to call when indexing into lua userdata representing
@@ -613,9 +554,6 @@ void luaW_setfuncs(lua_State* L, const char* classname, const luaL_Reg* table, c
     const luaL_Reg defaulttable[] =
     {
         { "new", luaW_new<T> },
-#ifdef LUAW_BUILDER
-        { "build", luaW_build<T> },
-#endif
         { NULL, NULL }
     };
     const luaL_Reg defaultmetatable[] = 
