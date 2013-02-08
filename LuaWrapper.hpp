@@ -34,8 +34,19 @@
 #ifndef LUA_WRAPPER_H_
 #define LUA_WRAPPER_H_
 
+// If you are linking against Lua compiled in C++, define LUAW_NO_EXTERN_C
+#ifndef LUAW_NO_EXTERN_C
+extern "C"
+{
+#endif // LUAW_NO_EXTERN_C
+
 #include "lua.h"
 #include "lauxlib.h"
+    
+#ifndef LUAW_NO_EXTERN_C
+}
+#endif // LUAW_NO_EXTERN_C
+
 
 #define LUAW_BUILDER
 
