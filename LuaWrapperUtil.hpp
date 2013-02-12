@@ -17,7 +17,7 @@
 #ifndef LUAWRAPPERUTILS_HPP_
 #define LUAWRAPPERUTILS_HPP_
 
-#include "LuaWrapper.hpp"
+#include "luawrapper.hpp"
 
 #ifdef _WIN32
 #define LUAW_BOOL_RELEASE
@@ -494,6 +494,47 @@ int luaU_clone(lua_State* L)
     luaW_hold<T>(L, obj);
     luaW_postconstructor<T>(L, numargs);
     return 1;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+//
+// luaU_build is intended to be used to initialize many values by passing in a
+// table. They keys of the table are used as function names, and values are 
+// used as arguments to the function. This is intended to be used on functions
+// that are simple setters.
+//
+// For example, if luaU_build is set as the post constructor, you can 
+// initialize an object as so:
+//
+// f = Foo.new
+// {
+//     X = 10;
+//     Y = 20;
+// }
+//
+// After the object is constructed, luaU_build will do the equivalent of 
+// calling f:X(10) and f:Y(20) . 
+//
+template <typename T>
+int luaU_build(lua_State* L)
+{
+    // obj {}
+    lua_insert(L, -2); // {} obj
+    if (lua_type(L, 1) == LUA_TTABLE)
+    {
+        for (lua_pushnil(L); lua_next(L, 1); lua_pop(L, 1))
+        {
+            // {} obj k v
+            lua_pushvalue(L, -2); // {} obj k v k
+            lua_gettable(L, -4); // {} obj k v ud[k]
+            lua_pushvalue(L, -4); // {} obj k v ud[k] ud
+            lua_pushvalue(L, -3); // {} obj k v ud[k] ud v
+            lua_call(L, 2, 0); // {} obj k v
+        }
+        // {} ud
+    }
+    return 0;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
