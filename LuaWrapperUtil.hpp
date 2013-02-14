@@ -19,12 +19,6 @@
 
 #include "luawrapper.hpp"
 
-#ifdef _WIN32
-#define LUAW_BOOL_RELEASE
-#else
-#define LUAW_BOOL_RELEASE , bool release = false
-#endif
-
 ///////////////////////////////////////////////////////////////////////////////
 //
 // A set if enum helper functions and macros
@@ -249,7 +243,7 @@ int luaU_set(lua_State* L)
     return 0;
 }
 
-template <typename T, typename U, const U* T::*Member LUAW_BOOL_RELEASE>
+template <typename T, typename U, const U* T::*Member>
 int luaU_set(lua_State* L)
 {
     T* obj = luaW_check<T>(L, 1);
@@ -261,6 +255,20 @@ int luaU_set(lua_State* L)
         if (member && release)
             luaW_release<U>(L, member);
 #endif
+    }
+    return 0;
+}
+
+template <typename T, typename U, const U* T::*Member>
+int luaU_setandrelease(lua_State* L)
+{
+    T* obj = luaW_check<T>(L, 1);
+    if (obj)
+    {
+        U* member = luaU_checkornil<U>(L, 2);
+        obj->*Member = member;
+        if (member)
+            luaW_release<U>(L, member);
     }
     return 0;
 }
@@ -283,7 +291,7 @@ int luaU_set(lua_State* L)
     return 0;
 }
 
-template <typename T, typename U, void (T::*Setter)(U*) LUAW_BOOL_RELEASE>
+template <typename T, typename U, void (T::*Setter)(U*)>
 int luaU_set(lua_State* L)
 {
     T* obj = luaW_check<T>(L, 1);
@@ -295,6 +303,20 @@ int luaU_set(lua_State* L)
         if (member && release)
             luaW_release<U>(L, member);
 #endif
+    }
+    return 0;
+}
+
+template <typename T, typename U, void (T::*Setter)(U*)>
+int luaU_setandrelease(lua_State* L)
+{
+    T* obj = luaW_check<T>(L, 1);
+    if (obj)
+    {
+        U* member = luaU_checkornil<U>(L, 2);
+        (obj->*Setter)(member);
+        if (member)
+            luaW_release<U>(L, member);
     }
     return 0;
 }
@@ -315,7 +337,7 @@ int luaU_getset(lua_State* L)
     }
 }
 
-template <typename T, typename U, U* T::*Member LUAW_BOOL_RELEASE>
+template <typename T, typename U, U* T::*Member>
 int luaU_getset(lua_State* L)
 {
     T* obj = luaW_check<T>(L, 1);
@@ -323,10 +345,25 @@ int luaU_getset(lua_State* L)
     {
         U* member = luaU_checkornil<U>(L, 2);
         obj->*Member = member;
-#ifndef _WIN32
-        if (member && release)
+        return 0;
+    }
+    else
+    {
+        luaW_push<U>(L, obj->*Member);
+        return 1;
+    }
+}
+
+template <typename T, typename U, U* T::*Member>
+int luaU_getsetandrelease(lua_State* L)
+{
+    T* obj = luaW_check<T>(L, 1);
+    if (obj && lua_gettop(L) >= 2)
+    {
+        U* member = luaU_checkornil<U>(L, 2);
+        obj->*Member = member;
+        if (member)
             luaW_release<U>(L, member);
-#endif
         return 0;
     }
     else
@@ -384,7 +421,7 @@ int luaU_getset(lua_State* L)
     }
 }
 
-template <typename T, typename U, U* (T::*Getter)() const, void (T::*Setter)(U*) LUAW_BOOL_RELEASE>
+template <typename T, typename U, U* (T::*Getter)() const, void (T::*Setter)(U*)>
 int luaU_getset(lua_State* L)
 {
     T* obj = luaW_check<T>(L, 1);
@@ -392,10 +429,25 @@ int luaU_getset(lua_State* L)
     {
         U* member = luaU_checkornil<U>(L, 2);
         (obj->*Setter)(member);
-#ifndef _WIN32
-        if (member && release)
+        return 0;
+    }
+    else
+    {
+        luaW_push(L, (obj->*Getter)());
+        return 1;
+    }
+}
+
+template <typename T, typename U, U* (T::*Getter)() const, void (T::*Setter)(U*)>
+int luaU_getsetandrelease(lua_State* L)
+{
+    T* obj = luaW_check<T>(L, 1);
+    if (obj && lua_gettop(L) >= 2)
+    {
+        U* member = luaU_checkornil<U>(L, 2);
+        (obj->*Setter)(member);
+        if (member)
             luaW_release<U>(L, member);
-#endif
         return 0;
     }
     else
