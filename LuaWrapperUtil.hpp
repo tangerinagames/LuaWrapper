@@ -235,10 +235,6 @@ int luaU_set(lua_State* L)
     {
         U* member = luaU_checkornil<U>(L, 2);
         obj->*Member = member;
-#ifndef _WIN32
-        if (member && release)
-            luaW_release<U>(L, member);
-#endif
     }
     return 0;
 }
@@ -251,10 +247,6 @@ int luaU_set(lua_State* L)
     {
         U* member = luaU_checkornil<U>(L, 2);
         obj->*Member = member;
-#ifndef _WIN32
-        if (member && release)
-            luaW_release<U>(L, member);
-#endif
     }
     return 0;
 }
@@ -299,10 +291,6 @@ int luaU_set(lua_State* L)
     {
         U* member = luaU_checkornil<U>(L, 2);
         (obj->*Setter)(member);
-#ifndef _WIN32
-        if (member && release)
-            luaW_release<U>(L, member);
-#endif
     }
     return 0;
 }
