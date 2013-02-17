@@ -17,7 +17,14 @@
 #ifndef LUAWRAPPERUTILS_HPP_
 #define LUAWRAPPERUTILS_HPP_
 
+#include <type_traits>
 #include "luawrapper.hpp"
+
+# if defined(STLPORT) && (_STLPORT_MAJOR <= 5) // in STLport 5.x.x trait_type are in TR1 ns
+#	define nspc std::tr1
+# else
+# 	define nspc std
+# endif
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -69,35 +76,134 @@ T* luaU_checkornil(lua_State* L, int index, bool strict = false)
 // LuaWrapper, especially with small objects.
 //
 
-template <typename U> U luaU_check(lua_State* L, int index);
-template <> inline bool          luaU_check<>(lua_State* L, int index) { return                           (lua_toboolean(L, index) != 0); }
-template <> inline const char*   luaU_check<>(lua_State* L, int index) { return                           (luaL_checkstring(L, index)); }
-template <> inline unsigned int  luaU_check<>(lua_State* L, int index) { return static_cast<unsigned int >(luaL_checkinteger(L, index)); }
-template <> inline int           luaU_check<>(lua_State* L, int index) { return static_cast<int          >(luaL_checkinteger(L, index)); }
-template <> inline unsigned char luaU_check<>(lua_State* L, int index) { return static_cast<unsigned char>(luaL_checkinteger(L, index)); }
-template <> inline char          luaU_check<>(lua_State* L, int index) { return static_cast<char         >(luaL_checkinteger(L, index)); }
-template <> inline float         luaU_check<>(lua_State* L, int index) { return static_cast<float        >(luaL_checknumber(L, index)); }
-template <> inline double        luaU_check<>(lua_State* L, int index) { return static_cast<double       >(luaL_checknumber(L, index)); }
+#ifdef LUAWRAPPERUTILSZ_FUNC
+// template <typename U> U luaU_check(lua_State* L, int index);
+template <typename U> inline typename nspc::enable_if<!nspc::is_enum<U>::value,U>::type luaU_check(lua_State* L, int index);
+template <> inline bool          luaU_check<bool>         (lua_State* L, int index) { return                               lua_toboolean      (L, index); }
+template <> inline const char*   luaU_check<const char*>  (lua_State* L, int index) { return                               luaL_checkstring   (L, index); }
+template <> inline unsigned int  luaU_check<unsigned int> (lua_State* L, int index) { return    static_cast<unsigned int >(luaL_checkinteger  (L, index)); }
+template <> inline int           luaU_check<int>          (lua_State* L, int index) { return    static_cast<int          >(luaL_checkinteger  (L, index)); }
+template <> inline unsigned char luaU_check<unsigned char>(lua_State* L, int index) { return    static_cast<unsigned char>(luaL_checkinteger  (L, index)); }
+template <> inline char          luaU_check<char>         (lua_State* L, int index) { return    static_cast<char         >(luaL_checkinteger  (L, index)); }
+template <> inline float         luaU_check<float>        (lua_State* L, int index) { return    static_cast<float        >(luaL_checknumber   (L, index)); }
+template <> inline double        luaU_check<double>       (lua_State* L, int index) { return    static_cast<double       >(luaL_checknumber   (L, index)); }
+// enum
+template <typename E> inline typename nspc::enable_if<nspc::is_enum<E>::value,E>::type luaU_check(lua_State* L, int index)
+                                                                                    { return                              luaU_checkenum<E>  (L, index); }
 
-template <typename U> U luaU_to(lua_State* L, int index);
-template <> inline bool          luaU_to<>(lua_State* L, int index) { return                           (lua_toboolean(L, index) != 0); }
-template <> inline const char*   luaU_to<>(lua_State* L, int index) { return                           (lua_tostring(L, index)); }
-template <> inline unsigned int  luaU_to<>(lua_State* L, int index) { return static_cast<unsigned int >(lua_tointeger(L, index)); }
-template <> inline int           luaU_to<>(lua_State* L, int index) { return static_cast<int          >(lua_tointeger(L, index)); }
-template <> inline unsigned char luaU_to<>(lua_State* L, int index) { return static_cast<unsigned char>(lua_tointeger(L, index)); }
-template <> inline char          luaU_to<>(lua_State* L, int index) { return static_cast<char         >(lua_tointeger(L, index)); }
-template <> inline float         luaU_to<>(lua_State* L, int index) { return static_cast<float        >(lua_tonumber(L, index)); }
-template <> inline double        luaU_to<>(lua_State* L, int index) { return static_cast<double       >(lua_tonumber(L, index)); }
+// template <typename U> U luaU_to(lua_State* L, int index);
+template <typename U> inline typename nspc::enable_if<!nspc::is_enum<U>::value,U>::type luaU_to(lua_State* L, int index);
+template <> inline bool          luaU_to<bool>         (lua_State* L, int index) { return                                lua_toboolean  (L, index); }
+template <> inline const char*   luaU_to<const char*>  (lua_State* L, int index) { return                                lua_tostring   (L, index); }
+template <> inline unsigned int  luaU_to<unsigned int> (lua_State* L, int index) { return     static_cast<unsigned int >(lua_tointeger  (L, index)); }
+template <> inline int           luaU_to<int>          (lua_State* L, int index) { return     static_cast<int          >(lua_tointeger  (L, index)); }
+template <> inline unsigned char luaU_to<unsigned char>(lua_State* L, int index) { return     static_cast<unsigned char>(lua_tointeger  (L, index)); }
+template <> inline char          luaU_to<char>         (lua_State* L, int index) { return     static_cast<char         >(lua_tointeger  (L, index)); }
+template <> inline float         luaU_to<float>        (lua_State* L, int index) { return     static_cast<float        >(lua_tonumber   (L, index)); }
+template <> inline double        luaU_to<double>       (lua_State* L, int index) { return     static_cast<double       >(lua_tonumber   (L, index)); }
+// enum
+template <typename E> inline typename nspc::enable_if<nspc::is_enum<E>::value,E>::type luaU_to(lua_State* L, int index)
+                                                                                 { return                               luaU_toenum<E>(L, index); }
+// template <typename U> void luaU_push(lua_State* L, const U& val);
+template <typename U> inline void luaU_push               (lua_State* L, const typename nspc::enable_if<!nspc::is_enum<U>::value,U>::type& val);
+template <>           inline void luaU_push<bool>         (lua_State* L, const typename nspc::enable_if<true,bool>::type&                 val) { lua_pushboolean (L, val); }
+template <>           inline void luaU_push<int>          (lua_State* L, const typename nspc::enable_if<true,int>::type&                  val) { lua_pushinteger (L, val); }
+template <>           inline void luaU_push<unsigned int> (lua_State* L, const typename nspc::enable_if<true,unsigned int>::type&         val) { lua_pushinteger (L, val); }
+template <>           inline void luaU_push<char>         (lua_State* L, const typename nspc::enable_if<true,char>::type&                 val) { lua_pushinteger (L, val); }
+template <>           inline void luaU_push<unsigned char>(lua_State* L, const typename nspc::enable_if<true,unsigned char>::type&        val) { lua_pushinteger (L, val); }
+template <>           inline void luaU_push<float>        (lua_State* L, const typename nspc::enable_if<true,float>::type&                val) { lua_pushnumber  (L, val); }
+template <>           inline void luaU_push<double>       (lua_State* L, const typename nspc::enable_if<true,double>::type&               val) { lua_pushnumber  (L, val); }
+template <>           inline void luaU_push<const char*>  (lua_State* L, const typename nspc::enable_if<true,const char*>::type&          val) { lua_pushstring  (L, val); }
+// enum
+template <typename E> inline void luaU_push               (lua_State* L, const typename nspc::enable_if<nspc::is_enum<E>::value,E>::type&  val){ luaU_pushenum   (L, val); }
 
-template <typename U> void luaU_push(lua_State* L, const U& val);
-template <> inline void luaU_push<>(lua_State* L, const bool&          val) { lua_pushboolean(L, val); }
-template <> inline void luaU_push<>(lua_State* L, const int&           val) { lua_pushinteger(L, val); }
-template <> inline void luaU_push<>(lua_State* L, const unsigned int&  val) { lua_pushinteger(L, val); }
-template <> inline void luaU_push<>(lua_State* L, const char&          val) { lua_pushinteger(L, val); }
-template <> inline void luaU_push<>(lua_State* L, const unsigned char& val) { lua_pushinteger(L, val); }
-template <> inline void luaU_push<>(lua_State* L, const char* const&   val) { lua_pushstring(L, val); }
-template <> inline void luaU_push<>(lua_State* L, const float&         val) { lua_pushnumber(L, val); }
-template <> inline void luaU_push<>(lua_State* L, const double&        val) { lua_pushnumber(L, val); }
+#else
+
+// structure template to hold member functions
+template<typename T, typename = void>
+struct FImpl;
+
+// function templates to be called by users; do NOT change
+template<typename U> U    luaU_check (lua_State* L, int      index ) { return FImpl<U>::luaU_check( L, index ); }
+template<typename U> U    luaU_to    (lua_State* L, int      index ) { return FImpl<U>::luaU_to   ( L, index ); }
+template<typename U> void luaU_push  (lua_State* L, const U& val   ) {        FImpl<U>::luaU_push ( L, val   ); }
+
+//------------------
+
+// structure specializations for different types; add as needed
+template<>
+struct FImpl<bool>
+{
+static bool luaU_check (lua_State* L, int         index ) { return lua_toboolean  (L, index ); }
+static bool luaU_to    (lua_State* L, int         index ) { return lua_toboolean  (L, index ); }
+static void luaU_push  (lua_State* L, const bool& val   ) {        lua_pushboolean(L, val   ); }
+};
+
+template<>
+struct FImpl<const char*>
+{
+static const char* luaU_check (lua_State* L, int                index ) { return luaL_checkstring (L, index ); }
+static const char* luaU_to    (lua_State* L, int                index ) { return lua_tostring     (L, index ); }
+static void        luaU_push  (lua_State* L, const char* const& val   ) {        lua_pushstring   (L, val   ); }
+};
+
+template<>
+struct FImpl<unsigned int>
+{
+static unsigned int luaU_check (lua_State* L, int                 index ) { return static_cast<unsigned int>(luaL_checkinteger (L, index )); }
+static unsigned int luaU_to    (lua_State* L, int                 index ) { return static_cast<unsigned int>(lua_tointeger     (L, index )); }
+static void         luaU_push  (lua_State* L, const unsigned int& val   ) {                                  lua_pushinteger   (L, val   ); }
+};
+
+template<>
+struct FImpl<int>
+{
+static int  luaU_check (lua_State* L, int        index ) { return static_cast<int>(luaL_checkinteger (L, index )); }
+static int  luaU_to    (lua_State* L, int        index ) { return static_cast<int>(lua_tointeger     (L, index )); }
+static void luaU_push  (lua_State* L, const int& val   ) {                         lua_pushinteger   (L, val   ); }
+};
+
+template<>
+struct FImpl<unsigned char>
+{
+static unsigned char luaU_check (lua_State* L, int                  index ) { return static_cast<unsigned char>(luaL_checkinteger (L, index )); }
+static unsigned char luaU_to    (lua_State* L, int                  index ) { return static_cast<unsigned char>(lua_tointeger     (L, index )); }
+static void          luaU_push  (lua_State* L, const unsigned char& val   ) {                                   lua_pushinteger   (L, val   ); }
+};
+
+template<>
+struct FImpl<char>
+{
+static char luaU_check (lua_State* L, int         index ) { return static_cast<char>(luaL_checkinteger (L, index )); }
+static char luaU_to    (lua_State* L, int         index ) { return static_cast<char>(lua_tointeger     (L, index )); }
+static void luaU_push  (lua_State* L, const char& val   ) {                          lua_pushinteger   (L, val   ); }
+};
+
+template<>
+struct FImpl<float>
+{
+static float luaU_check (lua_State* L, int          index ) { return static_cast<float>(luaL_checknumber (L, index )); }
+static float luaU_to    (lua_State* L, int          index ) { return static_cast<float>(lua_tonumber     (L, index )); }
+static void  luaU_push  (lua_State* L, const float& val   ) {                           lua_pushnumber   (L, val   ); }
+};
+
+template<>
+struct FImpl<double>
+{
+static double luaU_check (lua_State* L, int           index ) { return static_cast<double>(luaL_checknumber (L, index )); }
+static double luaU_to    (lua_State* L, int           index ) { return static_cast<double>(lua_tonumber     (L, index )); }
+static void   luaU_push  (lua_State* L, const double& val   ) {                            lua_pushnumber   (L, val   ); }
+};
+
+template<typename T>
+struct FImpl<T, typename nspc::enable_if<nspc::is_enum<T>::value>::type>
+{
+static T    luaU_check( lua_State* L, int      index ) { return luaU_checkenum<T> (L,      index); }
+static T    luaU_to   ( lua_State* L, int      index ) { return luaU_toenum<T>    (L,      index); }
+static void luaU_push ( lua_State* L, const T& val   ) {        luaU_pushenum<T>  (L,      val  ); }
+};
+
+#endif // LUAWRAPPERUTILSZ_FUNC
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -198,7 +304,7 @@ template <typename T, typename U, U (T::*Getter)() const>
 int luaU_get(lua_State* L)
 {
     T* obj = luaW_check<T>(L, 1);
-    luaU_push(L, (obj->*Getter)());
+    luaU_push<U>(L, (obj->*Getter)());
     return 1;
 }
 
@@ -206,7 +312,7 @@ template <typename T, typename U, const U& (T::*Getter)() const>
 int luaU_get(lua_State* L)
 {
     T* obj = luaW_check<T>(L, 1);
-    luaU_push(L, (obj->*Getter)());
+    luaU_push<U>(L, (obj->*Getter)());
     return 1;
 }
 
@@ -372,7 +478,7 @@ int luaU_getset(lua_State* L)
     }
     else
     {
-        luaU_push(L, (obj->*Getter)());
+        luaU_push<U>(L, (obj->*Getter)());
         return 1;
     }
 }
@@ -388,7 +494,7 @@ int luaU_getset(lua_State* L)
     }
     else
     {
-        luaU_push(L, (obj->*Getter)());
+        luaU_push<U>(L, (obj->*Getter)());
         return 1;
     }
 }
@@ -404,7 +510,7 @@ int luaU_getset(lua_State* L)
     }
     else
     {
-        luaU_push(L, (obj->*Getter)());
+        luaU_push<U>(L, (obj->*Getter)());
         return 1;
     }
 }
@@ -421,7 +527,7 @@ int luaU_getset(lua_State* L)
     }
     else
     {
-        luaW_push(L, (obj->*Getter)());
+        luaW_push<U>(L, (obj->*Getter)());
         return 1;
     }
 }
@@ -440,7 +546,7 @@ int luaU_getsetandrelease(lua_State* L)
     }
     else
     {
-        luaW_push(L, (obj->*Getter)());
+        luaW_push<U>(L, (obj->*Getter)());
         return 1;
     }
 }
@@ -451,9 +557,9 @@ int luaU_getsetandrelease(lua_State* L)
 //
 // luaU_func is a special macro that expands into a simple function wrapper.
 // Unlike the getter setters above, you merely need to name the function you
-// would like to wrap. 
+// would like to wrap.
 //
-// For example, 
+// For example,
 //
 // struct Foo
 // {
@@ -540,11 +646,11 @@ int luaU_clone(lua_State* L)
 ///////////////////////////////////////////////////////////////////////////////
 //
 // luaU_build is intended to be used to initialize many values by passing in a
-// table. They keys of the table are used as function names, and values are 
+// table. They keys of the table are used as function names, and values are
 // used as arguments to the function. This is intended to be used on functions
 // that are simple setters.
 //
-// For example, if luaU_build is set as the post constructor, you can 
+// For example, if luaU_build is set as the post constructor, you can
 // initialize an object as so:
 //
 // f = Foo.new
@@ -553,8 +659,8 @@ int luaU_clone(lua_State* L)
 //     Y = 20;
 // }
 //
-// After the object is constructed, luaU_build will do the equivalent of 
-// calling f:X(10) and f:Y(20) . 
+// After the object is constructed, luaU_build will do the equivalent of
+// calling f:X(10) and f:Y(20) .
 //
 template <typename T>
 int luaU_build(lua_State* L)
