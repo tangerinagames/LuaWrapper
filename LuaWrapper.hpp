@@ -131,6 +131,12 @@ luaW_Userdata luaW_cast(const luaW_Userdata& obj)
     return luaW_Userdata(static_cast<U*>(static_cast<T*>(obj.data)), LuaWrapper<U>::cast);
 }
 
+template <typename T, typename U>
+void luaW_identify(lua_State* L, T* obj)
+{
+    LuaWrapper<U>::identifier(L, static_cast<U*>(obj));
+}
+
 template <typename T>
 inline void luaW_wrapperfield(lua_State* L, const char* field)
 {
@@ -581,9 +587,8 @@ void luaW_setfuncs(lua_State* L, const char* classname, const luaL_Reg* table, c
     luaW_wrapperfield<T>(L, LUAW_CACHE_METATABLE_KEY); // ... LuaWrapper LuaWrapper.cache {} cmt
     lua_setmetatable(L, -2); // ... LuaWrapper LuaWrapper.cache {}
     lua_setfield(L, -2, LuaWrapper<T>::classname); // ... LuaWrapper LuaWrapper.cache
-    lua_pop(L, 1); // ... LuaWrapper
-    
-    lua_pop(L, 1); // ...
+        
+    lua_pop(L, 2); // ...
     
     // Open table
     lua_newtable(L); // ... T
@@ -620,6 +625,7 @@ void luaW_extend(lua_State* L)
         luaL_error(L, "attempting to extend %s by a type that has not been registered", LuaWrapper<T>::classname);
 
     LuaWrapper<T>::cast = luaW_cast<T, U>;
+    LuaWrapper<T>::identifier = luaW_identify<T, U>;
 
     luaL_getmetatable(L, LuaWrapper<T>::classname); // mt
     luaL_getmetatable(L, LuaWrapper<U>::classname); // mt emt
@@ -630,8 +636,25 @@ void luaW_extend(lua_State* L)
     lua_setfield(L, -2, "__index"); // mt emt {}
     lua_setmetatable(L, -3); // mt emt
 
-    // 
+    // Set up per-type tables to point at parent type
+    lua_getfield(L, LUA_REGISTRYINDEX, LUAW_WRAPPER_KEY); // ... LuaWrapper
+    
+    lua_getfield(L, -1, LUAW_STORAGE_KEY); // ... LuaWrapper LuaWrapper.storage
+    lua_getfield(L, -1, LuaWrapper<U>::classname); // ... LuaWrapper LuaWrapper.storage U
+    lua_setfield(L, -2, LuaWrapper<T>::classname); // ... LuaWrapper LuaWrapper.storage
+    lua_pop(L, 1); // ... LuaWrapper
 
+    lua_getfield(L, -1, LUAW_HOLDS_KEY); // ... LuaWrapper LuaWrapper.holds
+    lua_getfield(L, -1, LuaWrapper<U>::classname); // ... LuaWrapper LuaWrapper.holds U
+    lua_setfield(L, -2, LuaWrapper<T>::classname); // ... LuaWrapper LuaWrapper.holds
+    lua_pop(L, 1); // ... LuaWrapper
+
+    lua_getfield(L, -1, LUAW_CACHE_KEY); // ... LuaWrapper LuaWrapper.cache
+    lua_getfield(L, -1, LuaWrapper<U>::classname); // ... LuaWrapper LuaWrapper.cache U
+    lua_setfield(L, -2, LuaWrapper<T>::classname); // ... LuaWrapper LuaWrapper.cache
+        
+    lua_pop(L, 2); // ...
+    
     // Make a list of all types that inherit from U, for type checking
     lua_getfield(L, -2, LUAW_EXTENDS_KEY); // mt emt mt.extends
     lua_pushvalue(L, -2); // mt emt mt.extends emt
