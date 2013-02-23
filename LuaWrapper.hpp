@@ -183,14 +183,14 @@ T* luaW_to(lua_State* L, int index, bool strict = false)
 {
     if (luaW_is<T>(L, index, strict))
     {
-        luaW_Userdata* pud = (luaW_Userdata*)lua_touserdata(L, index);
+        luaW_Userdata* pud = static_cast<luaW_Userdata*>(lua_touserdata(L, index));
         luaW_Userdata ud;
         while (!strict && LuaWrapper<T>::cast != pud->cast)
         {
             ud = pud->cast(*pud);
             pud = &ud;
         }
-        return (T*)pud->data;
+        return static_cast<T*>(pud->data);
     }
     return NULL;
 }
@@ -629,6 +629,8 @@ void luaW_extend(lua_State* L)
     lua_pushvalue(L, -2); // mt emt {} emt
     lua_setfield(L, -2, "__index"); // mt emt {}
     lua_setmetatable(L, -3); // mt emt
+
+    // 
 
     // Make a list of all types that inherit from U, for type checking
     lua_getfield(L, -2, LUAW_EXTENDS_KEY); // mt emt mt.extends
