@@ -49,9 +49,10 @@ extern "C"
 
 #define LUAW_POSTCTOR_KEY "__postctor"
 #define LUAW_EXTENDS_KEY "__extends"
-#define LUAW_STORAGE_KEY "__storage"
-#define LUAW_CACHE_KEY "__cache"
-#define LUAW_HOLDS_KEY "__holds"
+#define LUAW_STORAGE_KEY "storage"
+#define LUAW_CACHE_KEY "cache"
+#define LUAW_CACHE_METATABLE_KEY "cachemetatable"
+#define LUAW_HOLDS_KEY "holds"
 #define LUAW_WRAPPER_KEY "LuaWrapper"
 
 // A simple utility function to adjust a given index
@@ -135,7 +136,9 @@ inline void luaW_wrapperfield(lua_State* L, const char* field)
 {
     lua_getfield(L, LUA_REGISTRYINDEX, LUAW_WRAPPER_KEY); // ... LuaWrapper
     lua_getfield(L, -1, field); // ... LuaWrapper LuaWrapper.field
-    lua_remove(L, -2); // ... LuaWrapper LuaWrapper.field
+    lua_getfield(L, -1, LuaWrapper<T>::classname); // ... LuaWrapper LuaWrapper.field LuaWrapper.field.class
+    lua_replace(L, -3); // ... LuaWrapper.field.class LuaWrapper.field
+    lua_pop(L, 1); // ... LuaWrapper.field.class
 }
 
 // Analogous to lua_is(boolean|string|*)
@@ -258,11 +261,7 @@ void luaW_push(lua_State* L, T* obj)
             {
                 lua_pushvalue(L, -4); // ... obj id cache storage nil id
                 lua_newtable(L); // ... obj id cache storage nil id store
-                lua_newtable(L); // ... obj id cache storage nil id store storemt
-                luaL_getmetatable(L, LuaWrapper<T>::classname); //  ... obj id cache storage nil id store storemt mt
-                lua_setfield(L, -2, "__index"); // ... obj id cache storage nil id store storemt
-                lua_setmetatable(L, -2); // ... obj id cache storage nil id store
-                lua_rawset(L, -4); // ... obj id cache storage nil
+                lua_settable(L, -4); // ... obj id cache storage nil
             }
             lua_pop(L, 4); // ... obj
         }
@@ -289,7 +288,7 @@ bool luaW_hold(lua_State* L, T* obj)
 {
     luaW_wrapperfield<T>(L, LUAW_HOLDS_KEY); // ... holds
     LuaWrapper<T>::identifier(L, obj); // ... holds id
-    lua_pushvalue(L, -1); // ... holds id
+    lua_pushvalue(L, -1); // ... holds id id
     lua_gettable(L, -3); // ... holds id hold
     // If it's not held, hold it
     if (!lua_toboolean(L, -1))
@@ -394,14 +393,13 @@ int luaW_index(lua_State* L)
     luaW_wrapperfield<T>(L, LUAW_STORAGE_KEY); // obj key storage
     LuaWrapper<T>::identifier(L, obj); // obj key storage id
     lua_gettable(L, -2); // obj key storage store
-    if (!lua_isnoneornil(L, -1))
+    
+    lua_pushvalue(L, -3); // obj key storage store key
+    lua_gettable(L, -2); // obj key storage store store[k]
+    
+    if (lua_isnoneornil(L, -1))
     {
-        lua_pushvalue(L, -3); // obj key storage store key
-        lua_gettable(L, -2); // obj key storage store store[k]
-    }
-    else
-    {
-        lua_pop(L, 2); // obj key
+        lua_pop(L, 3); // obj key
         lua_getmetatable(L, -2); // obj key mt
         lua_pushvalue(L, -2); // obj key mt k
         lua_gettable(L, -2); // obj key mt mt[k]
@@ -505,12 +503,13 @@ inline void luaW_initialize(lua_State* L)
         // Create a cache table, with weak values so that the userdata will not
         // be ref counted
         lua_newtable(L); // ... nil LuaWrapper {}
-        lua_newtable(L); // ... nil LuaWrapper {} {}
-        lua_pushstring(L, "v"); // ... nil LuaWrapper {} {} "v"
-        lua_setfield(L, -2, "__mode"); // ... nil LuaWrapper {} {}
-        lua_setmetatable(L, -2); // ... nil LuaWrapper {}
         lua_setfield(L, -2, LUAW_CACHE_KEY); // ... nil LuaWrapper
-
+        
+        lua_newtable(L); // ... nil LuaWrapper {}
+        lua_pushstring(L, "v"); // ... nil LuaWrapper {} "v"
+        lua_setfield(L, -2, "__mode"); // ... nil LuaWrapper {}
+        lua_setfield(L, -2, LUAW_CACHE_METATABLE_KEY); // ... nil LuaWrapper
+        
         lua_pop(L, 1); // ... nil
     }
     lua_pop(L, 1); // ...
@@ -564,6 +563,28 @@ void luaW_setfuncs(lua_State* L, const char* classname, const luaL_Reg* table, c
         { NULL, NULL } 
     };
 
+    // Set up per-type tables
+    lua_getfield(L, LUA_REGISTRYINDEX, LUAW_WRAPPER_KEY); // ... LuaWrapper
+    
+    lua_getfield(L, -1, LUAW_STORAGE_KEY); // ... LuaWrapper LuaWrapper.storage
+    lua_newtable(L); // ... LuaWrapper LuaWrapper.storage {}
+    lua_setfield(L, -2, LuaWrapper<T>::classname); // ... LuaWrapper LuaWrapper.storage
+    lua_pop(L, 1); // ... LuaWrapper
+
+    lua_getfield(L, -1, LUAW_HOLDS_KEY); // ... LuaWrapper LuaWrapper.holds
+    lua_newtable(L); // ... LuaWrapper LuaWrapper.holds {}
+    lua_setfield(L, -2, LuaWrapper<T>::classname); // ... LuaWrapper LuaWrapper.holds
+    lua_pop(L, 1); // ... LuaWrapper
+
+    lua_getfield(L, -1, LUAW_CACHE_KEY); // ... LuaWrapper LuaWrapper.cache
+    lua_newtable(L); // ... LuaWrapper LuaWrapper.cache {}
+    luaW_wrapperfield<T>(L, LUAW_CACHE_METATABLE_KEY); // ... LuaWrapper LuaWrapper.cache {} cmt
+    lua_setmetatable(L, -2); // ... LuaWrapper LuaWrapper.cache {}
+    lua_setfield(L, -2, LuaWrapper<T>::classname); // ... LuaWrapper LuaWrapper.cache
+    lua_pop(L, 1); // ... LuaWrapper
+    
+    lua_pop(L, 1); // ...
+    
     // Open table
     lua_newtable(L); // ... T
     luaW_registerfuncs(L, allocator ? defaulttable : NULL, table); // ... T
@@ -609,7 +630,7 @@ void luaW_extend(lua_State* L)
     lua_setfield(L, -2, "__index"); // mt emt {}
     lua_setmetatable(L, -3); // mt emt
 
-    // Make a list of al types that inherit from U, for type checking
+    // Make a list of all types that inherit from U, for type checking
     lua_getfield(L, -2, LUAW_EXTENDS_KEY); // mt emt mt.extends
     lua_pushvalue(L, -2); // mt emt mt.extends emt
     lua_setfield(L, -2, LuaWrapper<U>::classname); // mt emt mt.extends
