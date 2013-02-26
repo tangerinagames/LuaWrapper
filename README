@@ -91,3 +91,5 @@ Contributions:
 
 Thanks to Christopher Eykamp for the idea to use ephemeron tables to cache
 userdata to avoid unnecessary allocations as wells as various other feedback. 
+
+Thanks to qwer1304 for the addition of enum support in the utilities functions.
