@@ -24,15 +24,6 @@
 // namespace
 namespace luaW_std = std;
 
-template <typename T>
-T* luaU_checkornil(lua_State* L, int index, bool strict = false)
-{
-    if (lua_isnil(L, index))
-        return NULL;
-    else
-        return luaW_check<T>(L, index, strict);
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 //
 // A set of templated luaL_check and lua_push functions for use in the getters
