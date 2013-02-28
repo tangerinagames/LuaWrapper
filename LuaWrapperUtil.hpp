@@ -20,9 +20,9 @@
 #include "luawrapper.hpp"
 #include <type_traits>
 
-// Change this if your compiler has type_traits stuff in a non-standard 
-// namespace
-namespace luaW_std = std;
+#ifndef LUAW_STD
+#define LUAW_STD std
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -111,7 +111,7 @@ struct luaU_Impl<double>
 };
 
 template<typename T>
-struct luaU_Impl<T, typename luaW_std::enable_if<luaW_std::is_enum<T>::value>::type>
+struct luaU_Impl<T, typename LUAW_STD::enable_if<LUAW_STD::is_enum<T>::value>::type>
 {
     static T    luaU_check( lua_State* L, int      index) { return static_cast<T>(luaL_checkinteger  (L, index)); }
     static T    luaU_to   ( lua_State* L, int      index) { return static_cast<T>(lua_tointeger      (L, index)); }
