@@ -252,7 +252,7 @@ int luaU_set(lua_State* L)
     T* obj = luaW_check<T>(L, 1);
     if (obj)
     {
-        U* member = luaU_checkornil<U>(L, 2);
+        U* member = luaW_checkornil<U>(L, 2);
         obj->*Member = member;
     }
     return 0;
@@ -276,7 +276,7 @@ int luaU_setandrelease(lua_State* L)
     T* obj = luaW_check<T>(L, 1);
     if (obj)
     {
-        U* member = luaU_checkornil<U>(L, 2);
+        U* member = luaW_checkornil<U>(L, 2);
         obj->*Member = member;
         if (member)
             luaW_release<U>(L, member);
@@ -320,7 +320,7 @@ int luaU_setandrelease(lua_State* L)
     T* obj = luaW_check<T>(L, 1);
     if (obj)
     {
-        U* member = luaU_checkornil<U>(L, 2);
+        U* member = luaW_checkornil<U>(L, 2);
         (obj->*Setter)(member);
         if (member)
             luaW_release<U>(L, member);
