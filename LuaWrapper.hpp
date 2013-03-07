@@ -229,10 +229,10 @@ T* luaW_check(lua_State* L, int index, bool strict = false)
 }
 
 template <typename T>
-T* luaW_checkornil(lua_State* L, int index, bool strict = false)
+T* luaW_opt(lua_State* L, int index, T* fallback = nullptr, bool strict = false)
 {
     if (lua_isnil(L, index))
-        return nullptr;
+        return fallback;
     else
         return luaW_check<T>(L, index, strict);
 }
