@@ -40,19 +40,21 @@ struct luaU_Impl
     static U    luaU_check(lua_State* L, int      index);
     static U    luaU_to   (lua_State* L, int      index);
     static void luaU_push (lua_State* L, const U& value);
+    static void luaU_push (lua_State* L, 	   U& value);
 };
 
 template<typename U> U    luaU_check(lua_State* L, int      index) { return luaU_Impl<U>::luaU_check(L, index); }
 template<typename U> U    luaU_to   (lua_State* L, int      index) { return luaU_Impl<U>::luaU_to   (L, index); }
 template<typename U> void luaU_push (lua_State* L, const U& value) {        luaU_Impl<U>::luaU_push (L, value); }
+template<typename U> void luaU_push (lua_State* L,		 U& value) {        luaU_Impl<U>::luaU_push (L, value); }
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-// This is slightly different than the previous three functions in that you 
+// This is slightly different than the previous three functions in that you
 // shouldn't need to write your own version of it, since it uses luaU_check
-// automatically. 
+// automatically.
 //
-template<typename U> 
+template<typename U>
 U luaU_opt(lua_State* L, int index, const U& fallback = U())
 {
     if (lua_isnil(L, index))
@@ -131,6 +133,14 @@ struct luaU_Impl<T, typename LUAW_STD::enable_if<LUAW_STD::is_enum<T>::value>::t
     static T    luaU_check( lua_State* L, int      index) { return static_cast<T>(luaL_checkinteger  (L, index)); }
     static T    luaU_to   ( lua_State* L, int      index) { return static_cast<T>(lua_tointeger      (L, index)); }
     static void luaU_push ( lua_State* L, const T& value) {        lua_pushnumber(L, static_cast<int>(value   )); }
+};
+
+template<typename T>
+struct luaU_Impl<T *, typename LUAW_STD::enable_if<LUAW_STD::is_class<T>::value>::type>
+{
+    static T*	luaU_check( lua_State* L, int			index) { return luaW_check<T>  (L, index); }
+    static T*   luaU_to   ( lua_State* L, int			index) { return luaW_to   <T>  (L, index); }
+    static void	luaU_push ( lua_State* L, T *&			value) {        luaW_push <T>  (L, value); }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
