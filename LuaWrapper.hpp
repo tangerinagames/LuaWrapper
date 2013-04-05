@@ -96,7 +96,7 @@ void luaW_defaultidentifier(lua_State* L, T* obj)
 // when and object is the type I want. This is only used internally.
 struct luaW_Userdata
 {
-    luaW_Userdata(void* vptr = nullptr, luaW_Userdata (*udcast)(const luaW_Userdata&) = nullptr)
+    luaW_Userdata(void* vptr = NULL, luaW_Userdata (*udcast)(const luaW_Userdata&) = NULL)
         : data(vptr), cast(udcast) {}
     void* data;
     luaW_Userdata (*cast)(const luaW_Userdata&);
@@ -183,7 +183,7 @@ bool luaW_is(lua_State *L, int index, bool strict = false)
 // Analogous to lua_to(boolean|string|*)
 //
 // Converts the given acceptable index to a T*. That value must be of (or
-// convertable to) type T; otherwise, returns nullptr.
+// convertable to) type T; otherwise, returns NULL.
 template <typename T>
 T* luaW_to(lua_State* L, int index, bool strict = false)
 {
@@ -198,7 +198,7 @@ T* luaW_to(lua_State* L, int index, bool strict = false)
         }
         return static_cast<T*>(pud->data);
     }
-    return nullptr;
+    return NULL;
 }
 
 // Analogous to luaL_check(boolean|string|*)
@@ -208,7 +208,7 @@ T* luaW_to(lua_State* L, int index, bool strict = false)
 template <typename T>
 T* luaW_check(lua_State* L, int index, bool strict = false)
 {
-    T* obj = nullptr;
+    T* obj = NULL;
     if (luaW_is<T>(L, index, strict))
     {
         luaW_Userdata* pud = (luaW_Userdata*)lua_touserdata(L, index);
@@ -229,7 +229,7 @@ T* luaW_check(lua_State* L, int index, bool strict = false)
 }
 
 template <typename T>
-T* luaW_opt(lua_State* L, int index, T* fallback = nullptr, bool strict = false)
+T* luaW_opt(lua_State* L, int index, T* fallback = NULL, bool strict = false)
 {
     if (lua_isnil(L, index))
         return fallback;
@@ -488,9 +488,9 @@ inline void luaW_registerfuncs(lua_State* L, const luaL_Reg defaulttable[], cons
         luaL_setfuncs(L, table, 0); // ... T
 #else
     if (defaulttable)
-        luaL_register(L, nullptr, defaulttable); // ... T
+        luaL_register(L, NULL, defaulttable); // ... T
     if (table)
-        luaL_register(L, nullptr, table); // ... T
+        luaL_register(L, NULL, table); // ... T
 #endif
 }
 
@@ -539,7 +539,7 @@ inline void luaW_initialize(lua_State* L)
 //
 // You may also supply constructors and destructors for classes that do not
 // have a default constructor or that require special set up or tear down. You
-// may specify nullptr as the constructor, which means that you will not be able
+// may specify NULL as the constructor, which means that you will not be able
 // to call the new function on your class table. You will need to manually push
 // objects from C++. By default, the default constructor is used to create
 // objects and a simple call to delete is used to destroy them.
@@ -601,7 +601,7 @@ void luaW_setfuncs(lua_State* L, const char* classname, const luaL_Reg* table, c
     
     // Open table
     lua_newtable(L); // ... T
-    luaW_registerfuncs(L, allocator ? defaulttable : nullptr, table); // ... T
+    luaW_registerfuncs(L, allocator ? defaulttable : NULL, table); // ... T
 
     // Open metatable, set up extends table
     luaL_newmetatable(L, classname); // ... T mt

@@ -18,7 +18,10 @@
 #define LUAWRAPPERUTILS_HPP_
 
 #include "luawrapper.hpp"
+
+#ifndef LUAW_NO_CXX11
 #include <type_traits>
+#endif
 
 #ifndef LUAW_STD
 #define LUAW_STD std
@@ -40,13 +43,13 @@ struct luaU_Impl
     static U    luaU_check(lua_State* L, int      index);
     static U    luaU_to   (lua_State* L, int      index);
     static void luaU_push (lua_State* L, const U& value);
-    static void luaU_push (lua_State* L, 	   U& value);
+    static void luaU_push (lua_State* L,       U& value);
 };
 
 template<typename U> U    luaU_check(lua_State* L, int      index) { return luaU_Impl<U>::luaU_check(L, index); }
 template<typename U> U    luaU_to   (lua_State* L, int      index) { return luaU_Impl<U>::luaU_to   (L, index); }
 template<typename U> void luaU_push (lua_State* L, const U& value) {        luaU_Impl<U>::luaU_push (L, value); }
-template<typename U> void luaU_push (lua_State* L,		 U& value) {        luaU_Impl<U>::luaU_push (L, value); }
+template<typename U> void luaU_push (lua_State* L,       U& value) {        luaU_Impl<U>::luaU_push (L, value); }
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -127,6 +130,7 @@ struct luaU_Impl<double>
     static void   luaU_push (lua_State* L, const double& value) {                            lua_pushnumber  (L, value); }
 };
 
+#ifndef LUAW_NO_CXX11
 template<typename T>
 struct luaU_Impl<T, typename LUAW_STD::enable_if<LUAW_STD::is_enum<T>::value>::type>
 {
@@ -136,12 +140,13 @@ struct luaU_Impl<T, typename LUAW_STD::enable_if<LUAW_STD::is_enum<T>::value>::t
 };
 
 template<typename T>
-struct luaU_Impl<T *, typename LUAW_STD::enable_if<LUAW_STD::is_class<T>::value>::type>
+struct luaU_Impl<T*, typename LUAW_STD::enable_if<LUAW_STD::is_class<T>::value>::type>
 {
-    static T*	luaU_check( lua_State* L, int			index) { return luaW_check<T>  (L, index); }
-    static T*   luaU_to   ( lua_State* L, int			index) { return luaW_to   <T>  (L, index); }
-    static void	luaU_push ( lua_State* L, T *&			value) {        luaW_push <T>  (L, value); }
+    static T*   luaU_check( lua_State* L, int index) { return luaW_check<T>(L, index); }
+    static T*   luaU_to   ( lua_State* L, int index) { return luaW_to   <T>(L, index); }
+    static void luaU_push ( lua_State* L, T*& value) {        luaW_push <T>(L, value); }
 };
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -151,6 +156,10 @@ struct luaU_Impl<T *, typename LUAW_STD::enable_if<LUAW_STD::is_class<T>::value>
 template <typename U>
 inline U luaU_getfield(lua_State* L, int index, const char* field)
 {
+#ifndef LUAW_NO_CXX11
+    static_assert(!std::is_same<U, const char*>::value, 
+        "luaU_getfield is not safe to use on const char*'s. (The string will be popped from the stack.)");
+#endif
     lua_getfield(L, index, field);
     U val = luaU_to<U>(L, -1);
     lua_pop(L, 1);
@@ -160,6 +169,10 @@ inline U luaU_getfield(lua_State* L, int index, const char* field)
 template <typename U>
 inline U luaU_checkfield(lua_State* L, int index, const char* field)
 {
+#ifndef LUAW_NO_CXX11
+    static_assert(!std::is_same<U, const char*>::value, 
+        "luaU_checkfield is not safe to use on const char*'s. (The string will be popped from the stack.)");
+#endif
     lua_getfield(L, index, field);
     U val = luaU_check<U>(L, -1);
     lua_pop(L, 1);
@@ -489,7 +502,7 @@ int luaU_getsetandrelease(lua_State* L)
     }
 }
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(LUAW_NO_CXX11)
 
 ///////////////////////////////////////////////////////////////////////////////
 //
