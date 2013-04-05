@@ -18,7 +18,10 @@
 #define LUAWRAPPERUTILS_HPP_
 
 #include "luawrapper.hpp"
+
+#ifndef LUAW_NO_CXX11
 #include <type_traits>
+#endif
 
 #ifndef LUAW_STD
 #define LUAW_STD std
@@ -125,6 +128,7 @@ struct luaU_Impl<double>
     static void   luaU_push (lua_State* L, const double& value) {                            lua_pushnumber  (L, value); }
 };
 
+#ifndef LUAW_NO_CXX11
 template<typename T>
 struct luaU_Impl<T, typename LUAW_STD::enable_if<LUAW_STD::is_enum<T>::value>::type>
 {
@@ -132,6 +136,7 @@ struct luaU_Impl<T, typename LUAW_STD::enable_if<LUAW_STD::is_enum<T>::value>::t
     static T    luaU_to   ( lua_State* L, int      index) { return static_cast<T>(lua_tointeger      (L, index)); }
     static void luaU_push ( lua_State* L, const T& value) {        lua_pushnumber(L, static_cast<int>(value   )); }
 };
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -479,7 +484,7 @@ int luaU_getsetandrelease(lua_State* L)
     }
 }
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(LUAW_NO_CXX11)
 
 ///////////////////////////////////////////////////////////////////////////////
 //
