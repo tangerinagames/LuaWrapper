@@ -161,7 +161,7 @@ inline U luaU_checkfield(lua_State* L, int index, const char* field)
 {
 #ifndef LUAW_NO_CXX11
     static_assert(!std::is_same<U, const char*>::value, 
-        "luaU_getfield is not safe to use on const char*'s. (The string will be popped from the stack.)");
+        "luaU_checkfield is not safe to use on const char*'s. (The string will be popped from the stack.)");
 #endif
     lua_getfield(L, index, field);
     U val = luaU_check<U>(L, -1);
