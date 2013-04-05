@@ -146,6 +146,10 @@ struct luaU_Impl<T, typename LUAW_STD::enable_if<LUAW_STD::is_enum<T>::value>::t
 template <typename U>
 inline U luaU_getfield(lua_State* L, int index, const char* field)
 {
+#ifndef LUAW_NO_CXX11
+    static_assert(!std::is_same<U, const char*>::value, 
+        "luaU_getfield is not safe to use on const char*'s. (The string will be popped from the stack.)");
+#endif
     lua_getfield(L, index, field);
     U val = luaU_to<U>(L, -1);
     lua_pop(L, 1);
@@ -155,6 +159,10 @@ inline U luaU_getfield(lua_State* L, int index, const char* field)
 template <typename U>
 inline U luaU_checkfield(lua_State* L, int index, const char* field)
 {
+#ifndef LUAW_NO_CXX11
+    static_assert(!std::is_same<U, const char*>::value, 
+        "luaU_getfield is not safe to use on const char*'s. (The string will be popped from the stack.)");
+#endif
     lua_getfield(L, index, field);
     U val = luaU_check<U>(L, -1);
     lua_pop(L, 1);
