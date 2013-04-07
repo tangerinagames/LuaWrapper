@@ -18,8 +18,6 @@
 #define LUAWRAPPERUTILS_HPP_
 
 #include "luawrapper.hpp"
-#include <cstring>
-#include <cstdlib>
 
 #ifndef LUAW_NO_CXX11
 #include <type_traits>
@@ -29,7 +27,7 @@
 #define LUAW_STD std
 #endif
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 // A set of templated luaL_check and lua_push functions for use in the getters
 // and setters below
@@ -136,9 +134,9 @@ struct luaU_Impl<double>
 template<typename T>
 struct luaU_Impl<T, typename LUAW_STD::enable_if<LUAW_STD::is_enum<T>::value>::type>
 {
-    static T    luaU_check( lua_State* L, int      index) { return static_cast<T>(luaL_checkinteger  (L, index)); }
-    static T    luaU_to   ( lua_State* L, int      index) { return static_cast<T>(lua_tointeger      (L, index)); }
-    static void luaU_push ( lua_State* L, const T& value) {        lua_pushnumber(L, static_cast<int>(value   )); }
+    static T    luaU_check(lua_State* L, int      index) { return static_cast<T>(luaL_checkinteger  (L, index)); }
+    static T    luaU_to   (lua_State* L, int      index) { return static_cast<T>(lua_tointeger      (L, index)); }
+    static void luaU_push (lua_State* L, const T& value) {        lua_pushnumber(L, static_cast<int>(value   )); }
 };
 
 template<typename T>
@@ -147,7 +145,7 @@ struct luaU_Impl<T*, typename LUAW_STD::enable_if<LUAW_STD::is_class<T>::value>:
     static T*   luaU_check( lua_State* L, int index) { return luaW_check<T>(L, index); }
     static T*   luaU_to   ( lua_State* L, int index) { return luaW_to   <T>(L, index); }
     static void luaU_push ( lua_State* L, T*& value) {        luaW_push <T>(L, value); }
-    static void	luaU_push ( lua_State* L, T*  value) {        luaW_push <T>(L, value); }
+    static void luaU_push ( lua_State* L, T*  value) {        luaW_push <T>(L, value); }
 };
 #endif
 
@@ -156,34 +154,31 @@ struct luaU_Impl<T*, typename LUAW_STD::enable_if<LUAW_STD::is_class<T>::value>:
 // These are just some functions I've always felt should exist
 //
 
-template<typename U, typename = void>
-struct luaU_xxxfield_Impl
+template <typename U>
+inline U luaU_getfield(lua_State* L, int index, const char* field)
 {
-	static U luaU_getfield	(lua_State* L, int index, const char* field)
-	{
-	    lua_getfield(L, index, field);
-	    U val = luaU_to<U>(L, -1);
-	    lua_pop(L, 1);
-	    return val;
-	};
-	static U luaU_checkfield	(lua_State* L, int index, const char* field)
-	{
-		lua_getfield(L, index, field);
-		U val = luaU_check<U>(L, -1);
-		lua_pop(L, 1);
-		return val;
-	};
-};
+#ifndef LUAW_NO_CXX11
+    static_assert(!std::is_same<U, const char*>::value, 
+        "luaU_getfield is not safe to use on const char*'s. (The string will be popped from the stack.)");
+#endif
+    lua_getfield(L, index, field);
+    U val = luaU_to<U>(L, -1);
+    lua_pop(L, 1);
+    return val;
+}
 
-template<typename U> U luaU_getfield (lua_State* L, int index, const char* field)
-{ return luaU_xxxfield_Impl<U>::luaU_getfield (L, index, field); }
-template<typename U> U luaU_getfield (lua_State* L, int index, const char* field, U buff)
-{ return luaU_xxxfield_Impl<U>::luaU_getfield (L, index, field, buff); }
-
-template<typename U> U luaU_checkfield (lua_State* L, int index, const char* field)
-{ return luaU_xxxfield_Impl<U>::luaU_checkfield (L, index, field); }
-template<typename U> U luaU_checkfield (lua_State* L, int index, const char* field, U buff)
-{ return luaU_xxxfield_Impl<U>::luaU_checkfield (L, index, field, buff); }
+template <typename U>
+inline U luaU_checkfield(lua_State* L, int index, const char* field)
+{
+#ifndef LUAW_NO_CXX11
+    static_assert(!std::is_same<U, const char*>::value, 
+        "luaU_checkfield is not safe to use on const char*'s. (The string will be popped from the stack.)");
+#endif
+    lua_getfield(L, index, field);
+    U val = luaU_check<U>(L, -1);
+    lua_pop(L, 1);
+    return val;
+}
 
 template <typename U>
 inline void luaU_setfield(lua_State* L, int index, const char* field, U val)
@@ -191,31 +186,6 @@ inline void luaU_setfield(lua_State* L, int index, const char* field, U val)
     luaU_push<U>(L, val);
     lua_setfield(L, luaW_correctindex(L, index, 1), field);
 }
-
-template<>
-struct luaU_xxxfield_Impl<const char*>
-{
-	static const char* luaU_getfield (lua_State* L, int index, const char* field, const char* buff = NULL)
-	{
-    	lua_getfield(L, index, field);
-    	const char* val = luaU_to<const char*>(L, -1);
-    	if (buff == NULL)
-    		buff = (char*)malloc(strlen(val));
-    	strcpy(const_cast<char*>(buff), val);
-    	lua_pop(L, 1);
-    	return buff;
-	}
-	static const char* luaU_checkfield (lua_State* L, int index, const char* field, const char* buff = NULL)
-	{
-    	lua_getfield(L, index, field);
-    	const char* val = luaU_to<const char*>(L, -1);
-    	if (buff == NULL)
-    		buff = (char*)malloc(strlen(val));
-    	strcpy(const_cast<char*>(buff), val);
-    	lua_pop(L, 1);
-    	return buff;
-	}
-};
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -237,7 +207,7 @@ struct luaU_xxxfield_Impl<const char*>
 // returns the value. In your lua table declaration in C++ rather than write
 // individiual wrappers for each getter and setter you may do the following:
 //
-// static luaL_reg Foo_Metatable[] =
+// static luaL_reg Foo_metatable[] =
 // {
 //     { "GetBar", luaU_get<Foo, bool, &Widget::GetBar> },
 //     { "SetBar", luaU_set<Foo, bool, &Widget::SetBar> },
@@ -245,7 +215,7 @@ struct luaU_xxxfield_Impl<const char*>
 //     { NULL, NULL }
 // }
 //
-// Getters and setters must have the following signatures:
+// Getters and setters must have one of the following signatures:
 //    void T::Setter(U value);
 //    void T::Setter(U* value);
 //    void T::Setter(const U& value);
@@ -256,7 +226,7 @@ struct luaU_xxxfield_Impl<const char*>
 // through getter and setter functions. If Foo::bar were public, it could be
 // accessed directly, like so:
 //
-// static luaL_reg Foo_Metatable[] =
+// static luaL_reg Foo_metatable[] =
 // {
 //     { "GetBar", luaU_get<Foo, bool, &Widget::bar> },
 //     { "SetBar", luaU_set<Foo, bool, &Widget::bar> },
@@ -548,7 +518,7 @@ int luaU_getsetandrelease(lua_State* L)
 //     int DoSomething(int, const char*);
 // };
 //
-// static luaL_reg Foo_Metatable[] =
+// static luaL_reg Foo_metatable[] =
 // {
 //     { "DoSomething", luaU_func(&Foo::DoSomething) },
 //     { NULL, NULL }
@@ -560,45 +530,47 @@ int luaU_getsetandrelease(lua_State* L)
 //     luaU_push(luaW_check<T>(L, 1)->DoSomething(luaU_check<int>(L, 2), luaU_check<const char*>(L, 3)));
 //     return 1;
 //
-// Note that this does NOT work for overloaded functions, because decltype doesn't support same
-// To work around this you need to cast the function properly. Since the syntax is cryptic (at best),
-// here's a worked out example how to do this:
+// In this example there is only one member function called DoSomething. In some 
+// cases there may be multiple overrides for a function. For those cases, an 
+// additional macro has been provided, luaU_funcsig, which takes the entire
+// function signature. The arguments to the macro reflect the order they would
+// appear in the function signature: return type, type name, function name, and
+// finally a list of all the argument types. For example:
 //
-// struct Foo1 {
-//	int DoSomething (const char*);
-//	int DoSomething (const char*, int);
-// };
-//
-// typedef int (Foo1::*PFN_FOO1)(const char*);
-// typedef int (Foo1::*PFN_FOO2)(const char*, int);
-//
-// const struct luaL_Reg xxx_Metatable[] =
+// struct Foo
 // {
-//	{"Foo1",		luaU_func(static_cast<PFN_FOO1>(&Foo1::DoSomething))	},
-//	{"Foo2",		luaU_func(static_cast<PFN_FOO2>(&Foo1::DoSomething))	},
-//	{ NULL,			NULL 													}
+//     int DoSomething (const char*);
+//     int DoSomething (const char*, int);
 // };
 //
-// This macro and it's underlying templates are somewhat experimental and some
+// const struct luaL_Reg Foo_metatable[] =
+// {
+//     {"DoSomething1", luaU_funcsig(int, Foo, DoSomething, const char*)) },
+//     {"DoSomething1", luaU_funcsig(int, Foo, DoSomething, const char*, int)) },
+//     { NULL, NULL }
+// };
+//
+// These macros and it's underlying templates are somewhat experimental and some
 // refinements are probably needed.  There are cases where it does not
 // currently work and I expect some changes can be made to refine its behavior.
 //
 
-#define luaU_func(...) &luaU_FuncWrapper<decltype(__VA_ARGS__),__VA_ARGS__>::call
+#define luaU_func(memberfunc) &luaU_FuncWrapper<decltype(memberfunc),memberfunc>::call
+#define luaU_funcsig(returntype, type, funcname, ...) luaU_func(static_cast<returntype (type::*)(__VA_ARGS__)>(&type::funcname))
 
-template<int... ints> struct luaU_IntPack {};
+template<int... ints> struct luaU_IntPack { };
 template<int start, int count, int... tail> struct luaU_MakeIntRangeType { typedef typename luaU_MakeIntRangeType<start, count-1, start+count-1, tail...>::type type; };
 template<int start, int... tail> struct luaU_MakeIntRangeType<start, 0, tail...> { typedef luaU_IntPack<tail...> type; };
 template<int start, int count> inline typename luaU_MakeIntRangeType<start, count>::type luaU_makeIntRange() { return typename luaU_MakeIntRangeType<start, count>::type(); }
 template<class MemFunPtrType, MemFunPtrType MemberFunc> struct luaU_FuncWrapper;
 
 template<class T, class ReturnType, class... Args, ReturnType(T::*MemberFunc)(Args...)>
-struct luaU_FuncWrapper<ReturnType(T::*)(Args...), MemberFunc>
+struct luaU_FuncWrapper<ReturnType (T::*)(Args...), MemberFunc>
 {
 public:
     static int call(lua_State* L)
     {
-        return callImpl(L,luaU_makeIntRange<2,sizeof...(Args)>());
+        return callImpl(L, luaU_makeIntRange<2,sizeof...(Args)>());
     }
 
 private:
