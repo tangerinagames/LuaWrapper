@@ -255,30 +255,18 @@ void luaW_push(lua_State* L, T* obj)
         {
             // Create the new luaW_userdata and place it in the cache
             lua_pop(L, 1); // ... id cache
-            lua_pushvalue(L, -2); // ... id cache id
-            luaW_Userdata* ud = static_cast<luaW_Userdata*>(lua_newuserdata(L, sizeof(luaW_Userdata))); // ... id cache id obj
+            lua_insert(L, -2); // ... cache id
+            luaW_Userdata* ud = static_cast<luaW_Userdata*>(lua_newuserdata(L, sizeof(luaW_Userdata))); // ... cache id obj
             ud->data = obj;
             ud->cast = LuaWrapper<T>::cast;
-            lua_pushvalue(L, -1); // ... id cache id obj obj
-            lua_insert(L, -5); // ... obj id cache id obj
-            lua_settable(L, -3); // ... obj id cache
+            lua_pushvalue(L, -1); // ... cache id obj obj
+            lua_insert(L, -4); // ... obj cache id obj
+            lua_settable(L, -3); // ... obj cache
 
-            luaL_getmetatable(L, LuaWrapper<T>::classname); // ... obj id cache mt
-            lua_setmetatable(L, -4); // ... obj id cache
+            luaL_getmetatable(L, LuaWrapper<T>::classname); // ... obj cache mt
+            lua_setmetatable(L, -3); // ... obj cache
 
-            // Find and attach the storage table
-            luaW_wrapperfield<T>(L, LUAW_STORAGE_KEY); // ... obj id cache storage
-            lua_pushvalue(L, -3); // ... obj id cache storage id
-            lua_gettable(L, -2); // ... obj id cache storage store
-
-            // Add the storage table if there isn't one already
-            if (lua_isnil(L, -1))
-            {
-                lua_pushvalue(L, -4); // ... obj id cache storage nil id
-                lua_newtable(L); // ... obj id cache storage nil id store
-                lua_settable(L, -4); // ... obj id cache storage nil
-            }
-            lua_pop(L, 4); // ... obj
+            lua_pop(L, 1); // ... obj
         }
         else
         {
@@ -408,13 +396,19 @@ int luaW_index(lua_State* L)
     luaW_wrapperfield<T>(L, LUAW_STORAGE_KEY); // obj key storage
     LuaWrapper<T>::identifier(L, obj); // obj key storage id
     lua_gettable(L, -2); // obj key storage store
-    
-    lua_pushvalue(L, -3); // obj key storage store key
-    lua_gettable(L, -2); // obj key storage store store[k]
-    
-    if (lua_isnoneornil(L, -1))
+
+    // Check if storage table exists
+    if (!lua_isnil(L, -1))
     {
-        lua_pop(L, 3); // obj key
+        lua_pushvalue(L, -3); // obj key storage store key
+        lua_gettable(L, -2); // obj key storage store store[k]
+    }
+
+    // If either there is no storage table or the key wasn't found
+    // then fall back to the metatable
+    if (lua_isnil(L, -1))
+    {
+        lua_settop(L, 2); // obj key
         lua_getmetatable(L, -2); // obj key mt
         lua_pushvalue(L, -2); // obj key mt k
         lua_gettable(L, -2); // obj key mt mt[k]
@@ -433,16 +427,26 @@ template <typename T>
 int luaW_newindex(lua_State* L)
 {
     // obj key value
-    T* obj = luaW_to<T>(L, 1);
+    T* obj = luaW_check<T>(L, 1);
     luaW_wrapperfield<T>(L, LUAW_STORAGE_KEY); // obj key value storage
     LuaWrapper<T>::identifier(L, obj); // obj key value storage id
-    lua_gettable(L, -2); // obj key value storage store
-    if (!lua_isnoneornil(L, -1))
+    lua_pushvalue(L, -1); // obj key value storage id id
+    lua_gettable(L, -3); // obj key value storage id store
+
+    // Add the storage table if there isn't one already
+    if (lua_isnil(L, -1))
     {
-        lua_pushvalue(L, -4); // obj key value storage store key
-        lua_pushvalue(L, -4); // obj key value storage store key value
-        lua_settable(L, -3); // obj key value storage store
+        lua_pop(L, 1); // obj key value storage id
+        lua_newtable(L); // obj key value storage id store
+        lua_pushvalue(L, -1); // obj key value storage id store store
+        lua_insert(L, -3); // obj key value storage store id store
+        lua_settable(L, -4); // obj key value storage store
     }
+
+    lua_pushvalue(L, 2); // obj key value ... store key
+    lua_pushvalue(L, 3); // obj key value ... store key value
+    lua_settable(L, -3); // obj key value ... store
+
     return 0;
 }
 
@@ -681,7 +685,7 @@ void luaW_extend(lua_State* L)
 }
 
 /*
- * Copyright (c) 2010-2011 Alexander Ames
+ * Copyright (c) 2010-2013 Alexander Ames
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
