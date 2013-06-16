@@ -43,13 +43,11 @@ struct luaU_Impl
     static U    luaU_check(lua_State* L, int      index);
     static U    luaU_to   (lua_State* L, int      index);
     static void luaU_push (lua_State* L, const U& value);
-    static void luaU_push (lua_State* L,       U& value);
 };
 
 template<typename U> U    luaU_check(lua_State* L, int      index) { return luaU_Impl<U>::luaU_check(L, index); }
 template<typename U> U    luaU_to   (lua_State* L, int      index) { return luaU_Impl<U>::luaU_to   (L, index); }
 template<typename U> void luaU_push (lua_State* L, const U& value) {        luaU_Impl<U>::luaU_push (L, value); }
-template<typename U> void luaU_push (lua_State* L,       U& value) {        luaU_Impl<U>::luaU_push (L, value); }
 
 ////////////////////////////////////////////////////////////////////////////////
 //
