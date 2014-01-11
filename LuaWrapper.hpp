@@ -211,7 +211,7 @@ T* luaW_check(lua_State* L, int index, bool strict = false)
     T* obj = NULL;
     if (luaW_is<T>(L, index, strict))
     {
-        luaW_Userdata* pud = (luaW_Userdata*)lua_touserdata(L, index);
+        luaW_Userdata* pud = static_cast<luaW_Userdata*>(lua_touserdata(L, index));
         luaW_Userdata ud;
         while (!strict && LuaWrapper<T>::cast != pud->cast)
         {
