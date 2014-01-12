@@ -113,6 +113,7 @@ public:
     static T* (*allocator)(lua_State*);
     static void (*deallocator)(lua_State*, T*);
     static luaW_Userdata (*cast)(const luaW_Userdata&);
+    static void (*postconstructorrecurse)(lua_State* L, int numargs);
 private:
     LuaWrapper();
 };
@@ -121,6 +122,7 @@ template <typename T> void (*LuaWrapper<T>::identifier)(lua_State*, T*);
 template <typename T> T* (*LuaWrapper<T>::allocator)(lua_State*);
 template <typename T> void (*LuaWrapper<T>::deallocator)(lua_State*, T*);
 template <typename T> luaW_Userdata (*LuaWrapper<T>::cast)(const luaW_Userdata&);
+template <typename T> void (*LuaWrapper<T>::postconstructorrecurse)(lua_State* L, int numargs);
 
 // Cast from an object of type T to an object of type U. This template
 // function is instantiated by calling luaW_extend<T, U>(L). This is only used
@@ -232,9 +234,13 @@ template <typename T>
 T* luaW_opt(lua_State* L, int index, T* fallback = NULL, bool strict = false)
 {
     if (lua_isnil(L, index))
+    {
         return fallback;
+    }
     else
+    {
         return luaW_check<T>(L, index, strict);
+    }
 }
 
 // Analogous to lua_push(boolean|string|*)
@@ -333,32 +339,45 @@ void luaW_release(lua_State* L, T* obj)
     lua_pop(L, 1); // ...
 }
 
-// This function is called from Lua, not C++
-//
-// Calls the lua post-constructor (LUAW_POSTCTOR_KEY or "__postctor") on a
-// userdata. Assumes the userdata is on top of the stack, and numargs arguments
-// are below it. This runs the LUAW_POSTCTOR_KEY function on T's metatable,
-// using the object as the first argument and whatever else is below it as
-// the rest of the arguments This exists to allow types to adjust values in
-// thier storage table, which can not be created until after the constructor is
-// called.
 template <typename T>
-void luaW_postconstructor(lua_State* L, int numargs)
+void luaW_postconstructorinternal(lua_State* L, int numargs)
 {
-    // ... args... ud
-    lua_getfield(L, -1, LUAW_POSTCTOR_KEY); // ... args... ud ud.__postctor
+    // ... ud args...
+    if (LuaWrapper<T>::postconstructorrecurse)
+    {
+        LuaWrapper<T>::postconstructorrecurse(L, numargs);
+    }
+    luaL_getmetatable(L, LuaWrapper<T>::classname); // ... ud args... mt
+    lua_getfield(L, -1, LUAW_POSTCTOR_KEY); // ... ud args... mt postctor
     if (lua_type(L, -1) == LUA_TFUNCTION)
     {
-        lua_pushvalue(L, -2); // ... args... ud ud.__postctor ud
-        lua_insert(L, -3 - numargs); // ... ud args... ud ud.__postctor
-        lua_insert(L, -3 - numargs); // ... ud.__postctor ud args... ud
-        lua_insert(L, -3 - numargs); // ... ud ud.__postctor ud args...
-        lua_call(L, numargs + 1, 0); // ... ud
+        for (int i = 0; i < numargs + 1; i++) 
+        {
+            lua_pushvalue(L, -3 - numargs); // ... ud args... mt postctor ud args...
+        }
+        lua_call(L, numargs + 1, 0); // ... ud args... mt
+        lua_pop(L, 1); // ... ud args...
     }
     else
     {
-        lua_pop(L, 1); // ... ud
+        lua_pop(L, 2); // ... ud args...
     }
+}
+
+// This function is called from Lua, not C++
+//
+// Calls the lua post-constructor (LUAW_POSTCTOR_KEY or "__postctor") on a
+// userdata. Assumes the userdata is on the stack and numargs arguments follow
+// it. This runs the LUAW_POSTCTOR_KEY function on T's metatable, using the
+// object as the first argument and whatever else is below it as the rest of the
+// arguments This exists to allow types to adjust values in thier storage table,
+// which can not be created until after the constructor is called.
+template <typename T>
+void luaW_postconstructor(lua_State* L, int numargs)
+{
+    // ... ud args...
+    luaW_postconstructorinternal<T>(L, numargs); // ... ud args...
+    lua_pop(L, numargs); // ... ud
 }
 
 // This function is generally called from Lua, not C++
@@ -366,12 +385,14 @@ void luaW_postconstructor(lua_State* L, int numargs)
 // Creates an object of type T using the constructor and subsequently calls the
 // post-constructor on it.
 template <typename T>
-inline int luaW_new(lua_State* L, int args)
+inline int luaW_new(lua_State* L, int numargs)
 {
+    // ... args...
     T* obj = LuaWrapper<T>::allocator(L);
-    luaW_push<T>(L, obj);
+    luaW_push<T>(L, obj); // ... args... ud
     luaW_hold<T>(L, obj);
-    luaW_postconstructor<T>(L, args);
+    lua_insert(L, -1 - numargs); // ... ud args...
+    luaW_postconstructor<T>(L, numargs); // ... ud
     return 1;
 }
 
@@ -639,6 +660,7 @@ void luaW_extend(lua_State* L)
 
     LuaWrapper<T>::cast = luaW_cast<T, U>;
     LuaWrapper<T>::identifier = luaW_identify<T, U>;
+    LuaWrapper<T>::postconstructorrecurse = luaW_postconstructorinternal<U>;
 
     luaL_getmetatable(L, LuaWrapper<T>::classname); // mt
     luaL_getmetatable(L, LuaWrapper<U>::classname); // mt emt
