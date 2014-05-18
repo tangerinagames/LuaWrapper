@@ -30,11 +30,10 @@
 #ifndef LUAW_NO_CXX11
 ////////////////////////////////////////////////////////////////////////////////
 //
-// This template removes reference and cv-qualifiers from the type
+// This template removes reference and const qualifier from the type
 //
-
 template <typename T>
-struct luaW_remove_cvr
+struct luaW_remove_cr
 {
     typedef typename std::remove_const<typename std::remove_reference<T>::type>::type type;
 };
@@ -548,6 +547,11 @@ int luaU_getsetandrelease(lua_State* L)
 //     { NULL, NULL }
 // }
 //
+// void RegisterFoo(lua_State* L)
+// {
+//     luaW_register<Foo>(L, "Foo", NULL, Foo_metatable);
+// }
+//
 // This macro will expand based on the function signature of Foo::DoSomething
 // In this example, it would expand into the following wrapper:
 //
@@ -574,23 +578,63 @@ int luaU_getsetandrelease(lua_State* L)
 //     { NULL, NULL }
 // };
 //
+// There`s also support for static and freestanding functions. Macros luaU_staticfunc
+// and luaU_staticfuncsig work equally to luaU_func and luaU_funcsig, except for that
+// you need to provide a separate metatable for static functions.
+// For example,
+//
+// struct Foo
+// {
+//     int DoSomething(int, const char*);
+//     static void DoSomethingElse(int a, int b, float c);
+// };
+//
+// static luaL_reg Foo_metatable[] =
+// {
+//     { "DoSomething", luaU_func(&Foo::DoSomething) },
+//     { NULL, NULL }
+// };
+//
+// static luaL_reg Foo_metatable_static[] =
+// {
+//     { "DoSomethingElse", luaU_staticfunc(&Foo::DoSomethingElse) },
+//     { NULL, NULL }
+// };
+//
+// void RegisterFoo(lua_State* L)
+// {
+//     luaW_register<Foo>(L, "Foo", Foo_metatable_static, Foo_metatable);
+// }
+//
+// After that you will be able to use Foo class from Lua like this:
+// local foo = Foo.new()
+// foo:DoSomething(42, 'The Ultimate Question of Life, the Universe, and Everything.') -- member function call
+// Foo:DoSomethingElse(30, 12, 3.1459) -- Static function call
+//
 // These macros and it's underlying templates are somewhat experimental and some
 // refinements are probably needed.  There are cases where it does not
 // currently work and I expect some changes can be made to refine its behavior.
 //
 
-#define luaU_func(memberfunc) &luaU_FuncWrapper<decltype(memberfunc),memberfunc>::call
+#define luaU_func(memberfunc) &luaU_MemberFuncWrapper<decltype(memberfunc),memberfunc>::call
 #define luaU_funcsig(returntype, type, funcname, ...) luaU_func(static_cast<returntype (type::*)(__VA_ARGS__)>(&type::funcname))
+
+#define luaU_staticfunc(func) &luaU_StaticFuncWrapper<decltype(func),func>::call
+#define luaU_staticfuncsig(returntype, type, funcname, ...) luaU_staticfunc(static_cast<returntype (*)(__VA_ARGS__)>(&type::funcname))
 
 template<int... ints> struct luaU_IntPack { };
 template<int start, int count, int... tail> struct luaU_MakeIntRangeType { typedef typename luaU_MakeIntRangeType<start, count-1, start+count-1, tail...>::type type; };
 template<int start, int... tail> struct luaU_MakeIntRangeType<start, 0, tail...> { typedef luaU_IntPack<tail...> type; };
 template<int start, int count> inline typename luaU_MakeIntRangeType<start, count>::type luaU_makeIntRange() { return typename luaU_MakeIntRangeType<start, count>::type(); }
 
-template<class MemFunPtrType, MemFunPtrType MemberFunc> struct luaU_FuncWrapper;
+///////////////////////////////////////////////////////////////////////////////
+//
+// Member function wrapper
+//
+template<class MemFunPtrType, MemFunPtrType MemberFunc> struct luaU_MemberFuncWrapper;
 
 template<class T, class ReturnType, class... Args, ReturnType(T::*MemberFunc)(Args...)>
-struct luaU_FuncWrapper<ReturnType (T::*)(Args...), MemberFunc>
+struct luaU_MemberFuncWrapper<ReturnType (T::*)(Args...), MemberFunc>
 {
 public:
     static int call(lua_State* L)
@@ -602,13 +646,13 @@ private:
     template<int... indices>
     static int callImpl(lua_State* L, luaU_IntPack<indices...>)
     {
-        luaU_push<ReturnType>(L, (luaW_check<T>(L, 1)->*MemberFunc)(luaU_check<typename luaW_remove_cvr<Args>::type>(L, indices)...));
+        luaU_push<ReturnType>(L, (luaW_check<T>(L, 1)->*MemberFunc)(luaU_check<typename luaW_remove_cr<Args>::type>(L, indices)...));
         return 1;
     }
 };
 
 template<class T, class... Args, void(T::*MemberFunc)(Args...)>
-struct luaU_FuncWrapper<void(T::*)(Args...), MemberFunc>
+struct luaU_MemberFuncWrapper<void(T::*)(Args...), MemberFunc>
 {
 public:
     static int call(lua_State* L)
@@ -620,7 +664,51 @@ private:
     template<int... indices>
     static int callImpl(lua_State* L, luaU_IntPack<indices...>)
     {
-        (luaW_check<T>(L, 1)->*MemberFunc)(luaU_check<typename luaW_remove_cvr<Args>::type>(L, indices)...);
+        (luaW_check<T>(L, 1)->*MemberFunc)(luaU_check<typename luaW_remove_cr<Args>::type>(L, indices)...);
+        return 0;
+    }
+};
+
+
+///////////////////////////////////////////////////////////////////////////////
+//
+// static function wrapper
+//
+
+template<class FunPtrType, FunPtrType Func> struct luaU_StaticFuncWrapper;
+
+template<class ReturnType, class... Args, ReturnType(*Func)(Args...)>
+struct luaU_StaticFuncWrapper<ReturnType(*)(Args...), Func>
+{
+public:
+    static int call(lua_State* L)
+    {
+        return callImpl(L, luaU_makeIntRange<2,sizeof...(Args)>());
+    }
+
+private:
+    template<int... indices>
+    static int callImpl(lua_State* L, luaU_IntPack<indices...>)
+    {
+        luaU_push<ReturnType>(L, (*Func)(luaU_check<typename luaW_remove_cr<Args>::type>(L, indices)...));
+        return 1;
+    }
+};
+
+template<class... Args, void(*Func)(Args...)>
+struct luaU_StaticFuncWrapper<void(*)(Args...), Func>
+{
+public:
+    static int call(lua_State* L)
+    {
+        return callImpl(L, luaU_makeIntRange<2, sizeof...(Args)>());
+    }
+
+private:
+    template<int... indices>
+    static int callImpl(lua_State* L, luaU_IntPack<indices...>)
+    {
+        (*Func)(luaU_check<typename luaW_remove_cr<Args>::type>(L, indices)...);
         return 0;
     }
 };
