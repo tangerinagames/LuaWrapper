@@ -27,6 +27,19 @@
 #define LUAW_STD std
 #endif
 
+#ifndef LUAW_NO_CXX11
+////////////////////////////////////////////////////////////////////////////////
+//
+// This template removes reference and cv-qualifiers from the type
+//
+
+template <typename T>
+struct luaW_remove_cvr
+{
+	typedef typename std::remove_const<typename std::remove_reference<T>::type>::type type;
+};
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 //
 // A set of templated luaL_check and lua_push functions for use in the getters
@@ -156,7 +169,7 @@ template <typename U>
 inline U luaU_getfield(lua_State* L, int index, const char* field)
 {
 #ifndef LUAW_NO_CXX11
-    static_assert(!LUAW_STD::is_same<U, const char*>::value, 
+    static_assert(!LUAW_STD::is_same<U, const char*>::value,
         "luaU_getfield is not safe to use on const char*'s. (The string will be popped from the stack.)");
 #endif
     lua_getfield(L, index, field);
@@ -169,7 +182,7 @@ template <typename U>
 inline U luaU_checkfield(lua_State* L, int index, const char* field)
 {
 #ifndef LUAW_NO_CXX11
-    static_assert(!LUAW_STD::is_same<U, const char*>::value, 
+    static_assert(!LUAW_STD::is_same<U, const char*>::value,
         "luaU_checkfield is not safe to use on const char*'s. (The string will be popped from the stack.)");
 #endif
     lua_getfield(L, index, field);
@@ -541,8 +554,8 @@ int luaU_getsetandrelease(lua_State* L)
 //     luaU_push(luaW_check<T>(L, 1)->DoSomething(luaU_check<int>(L, 2), luaU_check<const char*>(L, 3)));
 //     return 1;
 //
-// In this example there is only one member function called DoSomething. In some 
-// cases there may be multiple overrides for a function. For those cases, an 
+// In this example there is only one member function called DoSomething. In some
+// cases there may be multiple overrides for a function. For those cases, an
 // additional macro has been provided, luaU_funcsig, which takes the entire
 // function signature. The arguments to the macro reflect the order they would
 // appear in the function signature: return type, type name, function name, and
@@ -573,6 +586,7 @@ template<int... ints> struct luaU_IntPack { };
 template<int start, int count, int... tail> struct luaU_MakeIntRangeType { typedef typename luaU_MakeIntRangeType<start, count-1, start+count-1, tail...>::type type; };
 template<int start, int... tail> struct luaU_MakeIntRangeType<start, 0, tail...> { typedef luaU_IntPack<tail...> type; };
 template<int start, int count> inline typename luaU_MakeIntRangeType<start, count>::type luaU_makeIntRange() { return typename luaU_MakeIntRangeType<start, count>::type(); }
+
 template<class MemFunPtrType, MemFunPtrType MemberFunc> struct luaU_FuncWrapper;
 
 template<class T, class ReturnType, class... Args, ReturnType(T::*MemberFunc)(Args...)>
@@ -588,11 +602,28 @@ private:
     template<int... indices>
     static int callImpl(lua_State* L, luaU_IntPack<indices...>)
     {
-        luaU_push<ReturnType>(L, (luaW_check<T>(L, 1)->*MemberFunc)(luaU_check<Args>(L, indices)...));
+        luaU_push<ReturnType>(L, (luaW_check<T>(L, 1)->*MemberFunc)(luaU_check<typename luaW_remove_cvr<Args>::type>(L, indices)...));
         return 1;
     }
 };
 
+template<class T, class... Args, void(T::*MemberFunc)(Args...)>
+struct luaU_FuncWrapper<void(T::*)(Args...), MemberFunc>
+{
+public:
+    static int call(lua_State* L)
+    {
+        return callImpl(L, luaU_makeIntRange<2, sizeof...(Args)>());
+    }
+
+private:
+    template<int... indices>
+    static int callImpl(lua_State* L, luaU_IntPack<indices...>)
+    {
+        (luaW_check<T>(L, 1)->*MemberFunc)(luaU_check<typename luaW_remove_cvr<Args>::type>(L, indices)...);
+        return 0;
+    }
+};
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////
