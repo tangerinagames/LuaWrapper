@@ -36,7 +36,7 @@
 template <typename T>
 struct luaW_remove_cvr
 {
-	typedef typename std::remove_const<typename std::remove_reference<T>::type>::type type;
+    typedef typename std::remove_const<typename std::remove_reference<T>::type>::type type;
 };
 #endif
 
